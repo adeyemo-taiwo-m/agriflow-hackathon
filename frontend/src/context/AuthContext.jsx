@@ -28,12 +28,14 @@ export const AuthProvider = ({ children }) => {
 
   const loginAction = async (credentials) => {
     const { data } = await api.post('/auth/login', credentials);
+    if (data?.data) setUser(data.data);
     await fetchProfile(); // fetch updated profile
     return data;
   };
 
   const adminLoginAction = async (credentials) => {
     const { data } = await api.post('/auth/admin/login', credentials);
+    if (data?.data) setUser(data.data);
     await fetchProfile(); // fetch updated profile
     return data;
   };
