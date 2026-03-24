@@ -54,7 +54,8 @@ export default function AuthPage() {
           last_name: data.last_name,
           email: data.email,
           password: data.password,
-          role: selectedRole
+          role: selectedRole,
+          business_name: data.business_name || undefined
         });
       } else {
         response = await login({
@@ -125,6 +126,13 @@ export default function AuthPage() {
                   {...register('last_name', { required: 'Last name is required' })} />
                 {errors.last_name && <span className="form-error">{errors.last_name.message}</span>}
               </div>
+            </div>
+          )}
+          {tab === 'signup' && role === 'farmer' && (
+            <div className="form-group">
+              <label className="form-label">Business Name (Optional)</label>
+              <input className="form-input" placeholder="e.g. Olusola Farms"
+                {...register('business_name')} />
             </div>
           )}
 
