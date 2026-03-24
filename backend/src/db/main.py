@@ -16,6 +16,8 @@ async def init_db():
         from src.auth.models import User, Admin
         from src.bank.models import Bank
         from src.crops.models import CropReference
+        from src.farms.models import Farm
+        from src.milestones.models import Milestone
 
         await conn.run_sync(SQLModel.metadata.create_all)
 

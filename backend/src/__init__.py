@@ -9,6 +9,7 @@ from src.bank.routes import bank_router
 from src.farmers.routes import farmer_router
 from src.investors.routes import investor_router
 from src.crops.routes import crop_router
+from src.farms.routes import farm_router
 
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -100,3 +101,4 @@ app.include_router(bank_router, prefix="/api/v1/banks", tags=["Banks"])
 app.include_router(farmer_router, prefix="/api/v1/farmers", tags=["farmers"])
 app.include_router(investor_router, prefix="/api/v1/investors", tags=["investors"])
 app.include_router(crop_router, prefix="/api/v1/crops", tags=["crops"])
+app.include_router(farm_router, prefix="/api/v1/farms", tags=["farms"])
