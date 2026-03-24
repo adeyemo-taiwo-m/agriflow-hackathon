@@ -14,7 +14,7 @@ export default function AuthPage() {
   const { addToast } = useToast();
   const navigate = useNavigate();
 
-  const { register, handleSubmit, formState: { errors }, reset, setError } = useForm();
+  const { register, handleSubmit, formState: { errors }, reset, setError, setValue } = useForm();
 
   useEffect(() => {
     reset();
@@ -22,6 +22,16 @@ export default function AuthPage() {
   }, [tab, reset]);
 
   const [isDemo, setIsDemo] = useState(false); // Changed to false because backend is now active
+
+  const fillAndSubmit = (email, password, role_choice) => {
+    setTab('login');
+    setRole(role_choice);
+    setValue('email', email);
+    setValue('password', password);
+    setTimeout(() => {
+      handleSubmit(onSubmit)();
+    }, 100);
+  };
 
   const onSubmit = async (data) => {
     if (!role) {
@@ -202,22 +212,10 @@ export default function AuthPage() {
           <div className="auth-demo">
             <p className="auth-demo-label">Quick demo access:</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-              <div>
-                <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '8px', textAlign: 'center' }}>Demo New Signups</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { demoLogin('farmer', {}, true); addToast('Demo generic new farmer', 'success'); navigate('/farmer/dashboard'); }}>New Farmer</button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { demoLogin('investor', {}, true); addToast('Demo generic new investor', 'success'); navigate('/investor/dashboard'); }}>New Investor</button>
-                </div>
-              </div>
-              <div>
-                <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '8px', textAlign: 'center' }}>Demo Existing Logins</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { demoLogin('farmer', {}, false); addToast('Demo returning farmer', 'success'); navigate('/farmer/dashboard'); }}>Returning Farmer</button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { demoLogin('investor', {}, false); addToast('Demo returning investor', 'success'); navigate('/investor/dashboard'); }}>Returning Investor</button>
-                </div>
-              </div>
+              <button type="button" className="btn btn-solid btn-sm" style={{ background: 'var(--color-primary)', color: '#fff' }} onClick={() => fillAndSubmit('farmer1@agriflow.ng', 'Farmer123!', 'farmer')}>Farmer View</button>
+              <button type="button" className="btn btn-solid btn-sm" style={{ background: 'var(--color-primary)', color: '#fff' }} onClick={() => fillAndSubmit('investor1@agriflow.ng', 'Invest123!', 'investor')}>Investor View</button>
             </div>
-            <button type="button" className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: '16px', color: 'var(--color-primary)', background: 'var(--color-primary-light)' }} onClick={() => { demoLogin('admin'); addToast('Logged in as Admin', 'success'); navigate('/admin/dashboard'); }}>Admin View</button>
+            <button type="button" className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: '16px', color: 'var(--color-accent)', borderColor: 'var(--color-accent)' }} onClick={() => navigate('/admin/login?demo=true')}>Admin View</button>
           </div>
         </form>
       </div>

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -10,12 +10,25 @@ export default function AdminLogin() {
   const { adminLogin, demoLogin } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const {
     register,
     handleSubmit,
     formState: { errors },
+    setValue
   } = useForm();
+
+  useEffect(() => {
+    if (searchParams.get("demo") === "true") {
+      setValue("email", "admin@agriflow.ng");
+      setValue("password", "Admin123!");
+      // Option to trigger submit automatically:
+      setTimeout(() => {
+        handleSubmit(onSubmit)();
+      }, 100);
+    }
+  }, [searchParams]);
 
   const [isDemo, setIsDemo] = useState(false);
 
