@@ -1,136 +1,216 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import api from '../utils/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 
 export default function KYCModal({ isOpen, onClose, role }) {
-  const [bvn, setBvn] = useState('');
+  const [view, setView] = useState('bvn_input'); // 'bvn_input' | 'bvn_score' | 'bank_input' | 'complete'
   const [loading, setLoading] = useState(false);
-  const [scoreData, setScoreData] = useState(null); // { trust_score, trust_tier }
-  const [view, setView] = useState('input'); // 'input' | 'score'
   const { addToast } = useToast();
-  const { fetchProfile } = useAuth();
+  const { user, setUser, fetchProfile } = useAuth();
 
+  // BVN States
+  const [bvn, setBvn] = useState('');
+  const [bvnScoreData, setBvnScoreData] = useState(null);
+
+  // Bank States
+  const [banks, setBanks] = useState([]);
+  const [bankQuery, setBankQuery] = useState('');
+  const [selectedBank, setSelectedBank] = useState(null); // { code, name }
+  const [accountNum, setAccountNum] = useState('');
+  const [showBanksList, setShowBanksList] = useState(false);
+  const [finalScoreData, setFinalScoreData] = useState(null);
+
+  // Fetch Banks List
+  useEffect(() => {
+    if (view === 'bank_input' && banks.length === 0) {
+      api.get('/banks')
+        .then(({ data }) => setBanks(data.data || []))
+        .catch(() => addToast("Failed to lock available banks list", "error"));
+    }
+  }, [view]);
+
+  // Handle BVN Action
   const handleBvnVerify = async (e) => {
     e.preventDefault();
-    if (bvn.length !== 11 || !/^\d+$/.test(bvn)) {
-      addToast("BVN must be exactly 11 digits", "error");
-      return;
-    }
+    if (bvn.length !== 11 || !/^\d+$/.test(bvn)) return addToast("BVN must be 11 digits", "error");
+    
     setLoading(true);
     try {
       const endpoint = role === 'farmer' ? '/farmers/verify-bvn' : '/investors/verify-bvn';
       const { data } = await api.post(endpoint, { bvn });
+      await fetchProfile(); // refresh layout flags
       
-      // Update local state to trigger rerender immediately on dashboards
-      await fetchProfile(); 
-      
-      const payload = data.data || data; // handle response layout wrappers
-      
+      const payload = data.data || data;
+      setBvnScoreData({
+        trust_score: payload.trust_score || 65,
+        trust_tier: payload.trust_tier || 'Emerging Farmer'
+      });
+
       if (role === 'farmer') {
-        setScoreData({
-          trust_score: payload.trust_score || 65,
-          trust_tier: payload.trust_tier || 'Emerging Farmer'
-        });
-        setView('score');
+        setView('bvn_score');
       } else {
         addToast("BVN Verified ✅", "success");
-        onClose(); // Advanced to Bank details directly in next steps
+        setView('bank_input');
       }
     } catch (err) {
-      addToast(err.response?.data?.detail || err.response?.data?.message || "Verification failed", "error");
+      addToast(err.response?.data?.detail || err.response?.data?.message || "BVN Verification failed", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const getTierColor = (tier) => {
-    if (!tier) return '#D97706';
-    const t = tier.toLowerCase();
-    if (t.includes('emerging')) return '#D97706'; // Amber
-    if (t.includes('verified')) return '#10B981'; // Green
-    return '#6B7280';
+  // Handle Bank Submit
+  const handleBankSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedBank) return addToast("Please select a bank", "error");
+    if (accountNum.length !== 10) return addToast("Account must be 10 digits", "error");
+
+    setLoading(true);
+    try {
+      const endpoint = role === 'farmer' ? '/farmers/bank-account' : '/investors/bank-account';
+      const { data } = await api.post(endpoint, { 
+        bank_code: selectedBank.code, 
+        account_num: accountNum 
+      });
+
+      const payload = data.data || data;
+      
+      // Update global context immediately so scorecard mounts values instantly!
+      setUser(prev => ({
+        ...prev,
+        bank_verified: true,
+        trust_score: payload.trust_score ?? prev.trust_score,
+        trust_tier: payload.trust_tier ?? prev.trust_tier
+      }));
+
+      setFinalScoreData(payload);
+      setView('complete');
+    } catch (err) {
+      addToast(err.response?.data?.detail || err.response?.data?.message || "Unable to save bank details", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const filteredBanks = banks.filter(b => b.name?.toLowerCase().includes(bankQuery.toLowerCase()));
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={view === 'input' ? "Verify identity via BVN" : "BVN Verified ✅"} width={480}>
-      {view === 'input' ? (
+    <Modal isOpen={isOpen} onClose={onClose} title={
+      view === 'bvn_input' ? "Verify identity via BVN" :
+      view === 'bvn_score' ? "BVN Verified ✅" :
+      view === 'bank_input' ? "Add Payout Mode (Bank Account)" : "Verification Complete 🎉"
+    } width={480}>
+
+      {/* STEP 1: BVN Input */}
+      {view === 'bvn_input' && (
         <form onSubmit={handleBvnVerify} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '6px' }}>
-              11-Digit BVN
-            </label>
-            <input 
-              type="text" 
-              value={bvn} 
-              onChange={e => setBvn(e.target.value.replace(/\D/g, '').slice(0, 11))} 
-              placeholder="Enter 11 digit numbers..."
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                borderRadius: '8px',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-surface)',
-                color: 'var(--color-text-primary)',
-                fontSize: '15px'
-              }}
-              required
-            />
-            <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-              We use your BVN to verify your legal identity and build your trust profile.
-            </p>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '6px' }}>11-Digit BVN</label>
+            <input type="text" value={bvn} onChange={e => setBvn(e.target.value.replace(/\D/g, '').slice(0, 11))} placeholder="Enter 11 digit numbers..." className="form-input" style={{ width: '100%' }} />
           </div>
-          <button 
-            type="submit" 
-            className="btn btn-solid" 
-            disabled={loading || bvn.length !== 11}
-            style={{ width: '100%', background: 'var(--color-primary)' }}
-          >
+          <button type="submit" className="btn btn-solid" disabled={loading || bvn.length !== 11} style={{ width: '100%', background: 'var(--color-primary)' }}>
             {loading ? "Verifying..." : "Verify BVN"}
           </button>
         </form>
-      ) : (
+      )}
+
+      {/* STEP 2: BVN Score Visuals (Farmer only) */}
+      {view === 'bvn_score' && (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ 
-            background: 'linear-gradient(135deg, rgba(217, 119, 6, 0.05) 0%, rgba(217, 119, 6, 0.01) 100%)', 
-            border: '1px solid rgba(217, 119, 6, 0.2)', 
-            borderRadius: '16px', 
-            padding: '24px', 
-            marginBottom: '24px' 
-          }}>
+          <div style={{ background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.01) 100%)', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
             <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '8px' }}>Your Trust Score</p>
-            <div style={{ fontSize: '42px', fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: '8px' }}>
-              {scoreData?.trust_score} <span style={{ fontSize: '20px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
+            <div style={{ fontSize: '42px', fontWeight: 800, color: '#D97706', marginBottom: '8px' }}>
+              {bvnScoreData?.trust_score} <span style={{ fontSize: '20px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
             </div>
-            
-            <div style={{ 
-              background: `${getTierColor(scoreData?.trust_tier)}1A`, 
-              color: getTierColor(scoreData?.trust_tier), 
-              padding: '6px 14px', 
-              borderRadius: '20px', 
-              display: 'inline-block', 
-              fontSize: '13px', 
-              fontWeight: 600,
-              marginBottom: '16px'
-            }}>
-              ⭐ {scoreData?.trust_tier}
+            <div style={{ background: '#FEF3C7', color: '#D97706', padding: '6px 14px', borderRadius: '20px', display: 'inline-block', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
+              ⭐ {bvnScoreData?.trust_tier}
             </div>
-            
-            <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-              Add your bank account next to boost your score and unlock full access to listed setups.
+            <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+              Add your bank account to boost your score and unlock full access.
             </div>
           </div>
-          
-          <button 
-            className="btn btn-solid" 
-            style={{ width: '100%', background: 'var(--color-primary)' }}
-            onClick={onClose}
-          >
-            Continue
-          </button>
+          <button className="btn btn-solid" style={{ width: '100%', background: 'var(--color-primary)' }} onClick={() => setView('bank_input')}>Continue</button>
         </div>
       )}
+
+      {/* STEP 3: Bank Account Input */}
+      {view === 'bank_input' && (
+        <form onSubmit={handleBankSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '6px' }}>Search Bank Name</label>
+            <input 
+              type="text" 
+              value={bankQuery} 
+              onChange={e => { setBankQuery(e.target.value); setShowBanksList(true); }} 
+              onFocus={() => setShowBanksList(true)}
+              placeholder="e.g., Guaranty Trust..." 
+              className="form-input" 
+              style={{ width: '100%' }} 
+            />
+            {showBanksList && filteredBanks.length > 0 && (
+              <ul style={{
+                position: 'absolute', top: '100%', left: 0, right: 0,
+                background: 'var(--color-card)', border: '1px solid var(--color-border)',
+                borderRadius: '8px', boxShadow: 'var(--shadow-md)', zIndex: 10,
+                maxHeight: '180px', overflowY: 'auto', marginTop: '4px', padding: '4px'
+              }}>
+                {filteredBanks.map(b => (
+                  <li 
+                    key={b.code} 
+                    onClick={() => { setSelectedBank(b); setBankQuery(b.name); setShowBanksList(false); }}
+                    style={{ padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', color: 'var(--color-text-primary)' }}
+                    className="dropdown-item"
+                  >
+                    {b.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '6px' }}>Account Number</label>
+            <input type="text" value={accountNum} onChange={e => setAccountNum(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter 10 digit number..." className="form-input" style={{ width: '100%' }} />
+          </div>
+          <button type="submit" className="btn btn-solid" disabled={loading || accountNum.length !== 10 || !selectedBank} style={{ width: '100%', background: 'var(--color-primary)' }}>
+            {loading ? "Adding Details..." : "Confirm Account"}
+          </button>
+        </form>
+      )}
+
+      {/* STEP 4: Completion Screen */}
+      {view === 'complete' && (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.01) 100%)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
+            <span style={{ fontSize: '32px' }}>✅</span>
+            <h4 style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: '12px 0 4px' }}>Bank Account Added</h4>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>We confirmed this account belongs to:</p>
+            <p style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-primary)', margin: '4px 0 16px' }}>{finalScoreData?.account_name}</p>
+
+            {role === 'farmer' && (
+              <>
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px', marginBottom: '4px' }}>Your Updated Trust Score</p>
+                <div style={{ fontSize: '36px', fontWeight: 800, color: '#10B981', marginBottom: '4px' }}>
+                  {finalScoreData?.trust_score} <span style={{ fontSize: '18px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
+                </div>
+                <div style={{ background: '#D1FAE5', color: '#059669', padding: '6px 14px', borderRadius: '20px', display: 'inline-block', fontSize: '12px', fontWeight: 600 }}>
+                  ⭐ {finalScoreData?.trust_tier}
+                </div>
+              </>
+            )}
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '20px', lineHeight: 1.4 }}>
+              🎉 Verification fully complete for access!
+            </p>
+          </div>
+          <button className="btn btn-solid" style={{ width: '100%', background: 'var(--color-primary)' }} onClick={onClose}>Go to Dashboard</button>
+        </div>
+      )}
+
+      <style>{`
+        .dropdown-item:hover { background: var(--color-card-alt); }
+      `}</style>
+
     </Modal>
   );
 }

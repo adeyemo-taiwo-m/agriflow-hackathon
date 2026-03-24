@@ -14,26 +14,7 @@ import InvestmentDetails from './pages/InvestmentDetails';
 import { PaymentSuccessPage, PaymentFailurePage } from './pages/PaymentPages';
 import HarvestReportPage from './pages/HarvestReportPage';
 
-function ProtectedRoute({ children, allowedRoles }) {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '16px' }}>
-        <div className="spinner" style={{ width: '32px', height: '32px', border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Verifying session...</p>
-        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  if (!user) return <Navigate to="/auth" replace />;
-
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/auth" replace />;
-  }
-  return children;
-}
+import ProtectedRoute from './components/ProtectedRoute';
 
 function AppRoutes() {
   return (
