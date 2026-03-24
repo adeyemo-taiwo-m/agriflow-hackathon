@@ -30,10 +30,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   if (!user) return <Navigate to="/auth" replace />;
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    if (user.role === 'farmer') return <Navigate to="/farmer/dashboard" replace />;
-    if (user.role === 'investor') return <Navigate to="/investor/dashboard" replace />;
-    if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
-    return <Navigate to="/" replace />;
+    return <Navigate to="/auth" replace />;
   }
   return children;
 }
