@@ -9,6 +9,8 @@ const api = axios.create({
   },
 });
 
+const PUBLIC_PAGES = ['/auth', '/admin/login', '/', '/farms'];
+
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -32,7 +34,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       // Avoid looping if the renew endpoint itself fails with 401
       if (originalRequest.url.includes('/auth/renew-access-token')) {
-        if (window.location.pathname !== '/auth') {
+        if (!PUBLIC_PAGES.includes(window.location.pathname)) {
           window.location.href = '/auth';
         }
         return Promise.reject(error);
@@ -62,7 +64,7 @@ api.interceptors.response.use(
         processQueue(err, null);
         isRefreshing = false;
         // Broadcast an event or just redirect
-        if (window.location.pathname !== '/auth') {
+        if (!PUBLIC_PAGES.includes(window.location.pathname)) {
           window.location.href = '/auth';
         }
         return Promise.reject(err);
