@@ -662,7 +662,7 @@ export default function FarmerDashboard() {
           <>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'28px'}}>
               <h1 style={{fontSize:'26px',fontWeight:700,fontFamily:'var(--font-heading)'}}>My Farms</h1>
-              <button className="btn btn-solid btn-sm" onClick={() => handleTabChange('add')}>+ Add Farm</button>
+              <button className="btn btn-solid btn-sm" onClick={() => kycComplete ? handleTabChange('add') : setIsKycOpen(true)}>+ Add Farm</button>
             </div>
 
             {/* Deadline-passed decision banner */}
