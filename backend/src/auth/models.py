@@ -1,10 +1,11 @@
-from sqlmodel import SQLModel, Column, Field
+from sqlmodel import SQLModel, Column, Field, Relationship
 import uuid
 from pydantic import EmailStr, computed_field
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 from datetime import datetime, timezone
 import sqlalchemy.dialects.postgresql as pg
+
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -61,6 +62,13 @@ class User(SQLModel, table=True):
         sa_column=Column(pg.TIMESTAMP(timezone=True), nullable=False)
     )
 
+    #relationship
+
+    farms : List['Farm'] = Relationship(
+        back_populates="owner"
+
+    )
+
     @computed_field
     @property
     def full_name(self) -> str:
@@ -77,6 +85,7 @@ class User(SQLModel, table=True):
             return FarmerTier.EMERGING
         else:
             return FarmerTier.UNRATED
+        
     
 
 class Admin(SQLModel, table=True):
