@@ -27,7 +27,7 @@ class FarmServices:
             )
         
         
-        if hasattr(farmer, 'bank_verified') and not farmer.bank_verified:
+        if not farmer.bank_verified:
              raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Add a bank account before listing a farm"
@@ -92,14 +92,15 @@ class FarmServices:
                 detail="Harvest date must be in the future"
             )
 
-        
+        farm_data = user_input.model_dump()
+        farm_data.pop("crop_reference_id", None)
         new_farm = Farm(
-            **user_input.model_dump(),
+            farm_data,
             farmer_id=farmer.uid,
             crop_reference_id=crop.id,
             crop_name=crop.name,
             funding_goal=user_input.total_budget,
-            status=FarmStatus.PENDING
+            farm_status=FarmStatus.PENDING
         )
         
         try:
@@ -157,7 +158,7 @@ class FarmServices:
                     order_number=index + 1,
                     expected_week=template["week"],
                     amount=amount,
-                    status=MilestoneStatus.LOCKED
+                    farm_status=MilestoneStatus.LOCKED
                 )
                 milestones.append(milestone)
             

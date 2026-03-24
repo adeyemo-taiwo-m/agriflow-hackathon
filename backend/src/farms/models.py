@@ -5,7 +5,6 @@ from datetime import datetime, date, timezone
 from pydantic import computed_field
 from sqlmodel import SQLModel, Field, Column, Relationship
 import sqlalchemy.dialects.postgresql as pg
-from src.auth.models import User
 import cloudinary
 
 def utc_now():
@@ -19,7 +18,7 @@ class FarmStatus(str, Enum):
     COMPLETED = "completed"
     PAID_OUT = "paid out"
     REJECTED = "rejected"
-    DEADLINE_PASSED = "deadline passed"
+    DEADLINE_PASSED = "deadline_passed"
     CANCELLED = "cancelled"
 
 
@@ -47,12 +46,12 @@ class Farm(SQLModel, table=True):
     start_date: date
     harvest_date: date
 
-    status: FarmStatus = Field(default=FarmStatus.PENDING)
+    farm_status: FarmStatus = Field(default=FarmStatus.PENDING)
 
     latitude: Optional[float] = Field(default = None)
     longitude: Optional[float] = Field(default = None)
 
-    location_Verified: bool = Field(default=False)
+    location_verified: bool = Field(default=False)
 
     location_photo_public_id: Optional[str] = Field(default=None)
     display_photos_public_id: Optional[list] = Field(
@@ -83,7 +82,7 @@ class Farm(SQLModel, table=True):
 
     #relationship
 
-    owner: User = Relationship(
+    owner: Optional["User"] = Relationship(
         back_populates="farms"
     )
 

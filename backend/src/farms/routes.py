@@ -36,7 +36,7 @@ async def upload_farm_details(
     latitude: float = Form(..., ge=4.0, le=14.0),
     longitude: float = Form(..., ge=2.5, le=15.0),
     location_photo: UploadFile = File(...),
-    display_photos: List[UploadFile] = File(...),
+    display_photos: List[UploadFile] = File(default=[]),
     current_farmer = Depends(get_current_farmer),
     session: AsyncSession = Depends(get_session),
     farm_services: FarmServices = Depends(get_farm_services)
