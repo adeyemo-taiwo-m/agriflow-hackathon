@@ -24,12 +24,12 @@ export default function AuthPage() {
   const [isDemo, setIsDemo] = useState(false); // Changed to false because backend is now active
 
   const onSubmit = async (data) => {
-    if (tab === 'signup' && !role) {
+    if (!role) {
       addToast('Please select your role', 'error');
       return;
     }
     setLoading(true);
-    const selectedRole = tab === 'login' ? 'investor' : role;
+    const selectedRole = role;
     
     // DEMO MODE: Completely bypass backend for presentation navigation
     if (isDemo) {
@@ -161,8 +161,7 @@ export default function AuthPage() {
             </div>
           )}
 
-          {tab === 'signup' && (
-            <div className="role-select">
+          <div className="role-select">
               <p className="form-label" style={{ marginBottom: '12px' }}>I am a…</p>
               <div className="role-cards">
                 <div className={`role-card${role === 'farmer' ? ' selected' : ''}`} onClick={() => setRole('farmer')}>
@@ -190,7 +189,6 @@ export default function AuthPage() {
                 </div>
               </div>
             </div>
-          )}
 
           <button type="submit" className="btn btn-solid btn-full" style={{ marginTop: '8px' }} disabled={loading}>
             {loading ? 'Processing...' : (tab === 'login' ? 'Log In' : 'Create Account')}
