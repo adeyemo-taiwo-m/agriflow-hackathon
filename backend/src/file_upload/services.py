@@ -12,11 +12,13 @@ class ImageCategory(str, Enum):
     LOCATION_PHOTO = "location_photo"
     MILESTONE_PHOTO = "milestone_photo"
     PAYMENT_PHOTO = "payment_photo"
+    
 
 max_display_photo_upload_bytes = 5 
 max_location_photo_upload_bytes = 3 
 max_milestone_photo_upload_bytes = 3 
 max_payment_photo_upload_bytes = 3 
+
 
 
 cloudinary.config(
@@ -38,6 +40,7 @@ class FileUploadServices:
             max_upload_bytes = max_milestone_photo_upload_bytes
         elif image_category == ImageCategory.PAYMENT_PHOTO:
             max_upload_bytes = max_payment_photo_upload_bytes
+       
 
         header_data = file.file.read(2048)
 
@@ -80,6 +83,7 @@ class FileUploadServices:
             file_path = f"Agriflow/milestone-photo/{farm_id}"
         elif image_category == ImageCategory.PAYMENT_PHOTO:
             file_path = f"Agriflow/payment-photo/{farm_id}"
+    
 
         try:
             response = await asyncio.to_thread(

@@ -1,5 +1,4 @@
 from fastapi import FastAPI, Request, HTTPException, status
-
 from contextlib import asynccontextmanager
 from src.db.main import init_db
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +10,7 @@ from src.investors.routes import investor_router
 from src.crops.routes import crop_router
 from src.farms.routes import farm_router
 from src.admin.routes import admin_router
+from src.milestones.routes import milestone_router
 
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -74,7 +74,6 @@ async def custom_http_exception_handler(request: Request, exc:HTTPException):
 def format_validation_errors(errors):
     formatted = []
     for err in errors:
-        # Skip the first element if it's "body", "query", etc.
         loc = err["loc"]
         field = ".".join(str(l) for l in loc[1:]) if len(loc) > 1 else str(loc[0])
         formatted.append({
@@ -104,3 +103,4 @@ app.include_router(investor_router, prefix="/api/v1/investors", tags=["investors
 app.include_router(crop_router, prefix="/api/v1/crops", tags=["crops"])
 app.include_router(farm_router, prefix="/api/v1/farms", tags=["farms"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
+app.include_router(milestone_router, prefix="/api/v1/milestones", tags=["milestones"])

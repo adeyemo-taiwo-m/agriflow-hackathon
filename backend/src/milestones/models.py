@@ -4,10 +4,12 @@ from typing import Optional
 from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Column, Relationship
 import sqlalchemy.dialects.postgresql as pg
+from pydantic import computed_field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.farms.models import Farm
+    from src.proofs.models import Proof
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -34,17 +36,6 @@ class Milestone(SQLModel, table=True):
     
     status: MilestoneStatus = Field(default=MilestoneStatus.LOCKED)
     rejection_reason: Optional[str] = Field(default=None)
-    
-    proof_photo_url: Optional[str] = Field(default=None)
-    proof_latitude: Optional[float] = Field(default=None)
-    proof_longitude: Optional[float] = Field(default=None)
-    gps_distance_km: Optional[float] = Field(default=None)
-    gps_flag: Optional[str] = Field(default=None) # "pass" | "warning" | "fail"
-    
-    submitted_at: Optional[datetime] = Field(
-        default=None,
-        sa_column=Column(pg.TIMESTAMP(timezone=True), nullable=True)
-    )
 
     created_at: datetime = Field(
         default_factory=utc_now,
@@ -57,3 +48,53 @@ class Milestone(SQLModel, table=True):
 
     #relationships
     farm: "Farm" = Relationship(back_populates="milestones")
+    proofs: list["Proof"] = Relationship(back_populates="milestone")
+
+    @computed_field
+    @property
+    def proof_photo_url(self) -> Optional[str]:
+        if not self.proofs:
+            return None
+        # Sort proofs by submitted_at descending to get the latest
+        latest_proof = sorted(self.proofs, key=lambda p: p.submitted_at, reverse=True)[0]
+        return latest_proof.photo_url
+
+    @computed_field
+    @property
+    def proof_latitude(self) -> Optional[float]:
+        if not self.proofs:
+            return None
+        latest_proof = sorted(self.proofs, key=lambda p: p.submitted_at, reverse=True)[0]
+        return latest_proof.gps_latitude
+
+    @computed_field
+    @property
+    def proof_longitude(self) -> Optional[float]:
+        if not self.proofs:
+            return None
+        latest_proof = sorted(self.proofs, key=lambda p: p.submitted_at, reverse=True)[0]
+        return latest_proof.gps_longitude
+
+    @computed_field
+    @property
+    def gps_distance_km(self) -> Optional[float]:
+        if not self.proofs:
+            return None
+        latest_proof = sorted(self.proofs, key=lambda p: p.submitted_at, reverse=True)[0]
+        return latest_proof.gps_distance_km
+
+    @computed_field
+    @property
+    def gps_flag(self) -> Optional[str]:
+        if not self.proofs:
+            return None
+        latest_proof = sorted(self.proofs, key=lambda p: p.submitted_at, reverse=True)[0]
+        return latest_proof.gps_flag
+
+    @computed_field
+    @property
+    def submitted_at(self) -> Optional[datetime]:
+        if not self.proofs:
+            return None
+        latest_proof = sorted(self.proofs, key=lambda p: p.submitted_at, reverse=True)[0]
+        return latest_proof.submitted_at

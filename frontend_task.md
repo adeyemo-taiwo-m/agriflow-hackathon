@@ -45,6 +45,9 @@ GET  /api/v1/admin/milestones/pending (List milestones under review)
 POST /api/v1/admin/milestones/{id}/approve
 POST /api/v1/admin/milestones/{id}/reject
 GET  /api/v1/admin/stats            (Global platform statistics)
+
+# Milestones (Phase 2B)
+POST /api/v1/milestones/{id}/proof  (Submit photo + GPS proof)
 ```
 
 ---
@@ -365,6 +368,30 @@ The frontend should keep values in local state (or persisted client state) and s
   - `422`: invalid multipart/form-data payload (missing/invalid latitude, longitude, or file fields). Highlight upload form fields.
   - `500`: upload/setup failure. Show retry option; keep local files queued for resubmission where possible.
 
+### Task 14B — Milestone Proof Submission
+Farmers must submit evidence (photo + GPS) to advance their milestones to `under_review`.
+
+**Endpoint:**
+```http
+POST /api/v1/milestones/{id}/proof
+Content-Type: multipart/form-data
+- photo: [binary]
+- gps_latitude: float
+- gps_longitude: float
+- gps_accuracy_m: float (optional)
+- note: string (optional)
+```
+
+**GPS Accuracy ("Circle of Uncertainty"):**
+Nigerian rural farms often have poor signal. Always send `gps_accuracy_m` (from `GeolocationCoordinates.accuracy`). 
+- **High Accuracy (3m-15m):** Uses GPS/WiFi. Very precise.
+- **Low Accuracy (500m+):** Uses Cell Towers. The backend "Smart Guard" uses this to be lenient if the farmer is slightly outside the 1km zone but has a weak signal.
+
+**GPS Flags in Response:**
+- `pass`: Within 1km. Auto-passes initial location check.
+- `warning`: 1km – 5km. Triggers manual admin review of the photo.
+- `fail`: > 5km. Likely fraudulent; show warning to farmer: *"You appear to be too far from the farm. Please stand on the registered land."*
+
 ---
 
 ## Part 6: UI Features
@@ -510,7 +537,7 @@ This colour system applies everywhere a tier appears: farmer dashboard, farm lis
 | Farm CRUD                   | ✅ Live (2-Step)  |
 | Admin Dashboard API (2A)    | ✅ Live           |
 | Investments API             | ⏳ Coming soon    |
-| Milestone proof submissions | ⏳ Ready to build |
+| Milestone proof submissions | ✅ Live           |
 | Payouts API                 | ⏳ Coming soon    |
 
 Your priority is: **Tasks 1–13 first** (API client, auth, KYC). Once those are done the KYC and dashboard experience will be fully functional with real data. Farm creation (Task 14) can run in parallel: text steps can be built with crops data, then wired to the final upload-submission step (`/farms/{id}/uploads`).
