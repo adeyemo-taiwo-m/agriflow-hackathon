@@ -12,6 +12,7 @@ from src.farms.routes import farm_router
 from src.admin.routes import admin_router
 from src.milestones.routes import milestone_router
 from src.investments.routes import investment_router
+from src.harvest.routes import harvest_router
 
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -105,3 +106,5 @@ app.include_router(crop_router, prefix="/api/v1/crops", tags=["crops"])
 app.include_router(farm_router, prefix="/api/v1/farms", tags=["farms"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(milestone_router, prefix="/api/v1/milestones", tags=["milestones"])
+app.include_router(investment_router, prefix="/api/v1/investments", tags=["investments"])
+app.include_router(harvest_router, prefix="/api/v1/harvest", tags=["Harvest"])
