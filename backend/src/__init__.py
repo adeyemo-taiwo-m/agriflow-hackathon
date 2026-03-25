@@ -11,6 +11,7 @@ from src.crops.routes import crop_router
 from src.farms.routes import farm_router
 from src.admin.routes import admin_router
 from src.milestones.routes import milestone_router
+from src.investments.routes import investment_router
 
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError

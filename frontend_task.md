@@ -48,6 +48,11 @@ GET  /api/v1/admin/stats            (Global platform statistics)
 
 # Milestones (Phase 2B)
 POST /api/v1/milestones/{id}/proof  (Submit photo + GPS proof)
+
+# Investments (Phase 2C)
+POST /api/v1/investments/initiate  (Get Interswitch params)
+POST /api/v1/investments/verify    (Server-side verification)
+GET  /api/v1/investments/          (Investor's history)
 ```
 
 ---
@@ -435,6 +440,63 @@ This reassures investors that even an Unrated farmer is not a fraud risk — the
   - Not logged in → "Invest Now" saves state and routes to `/auth`.
   - Logged in but not KYC verified → "Complete your KYC to invest."
 
+### Task 17B — Investment Payment Flow (Interswitch)
+
+When an investor clicks "Invest Now", follow this server-side-first flow to ensure security and auditability.
+
+**1. Modal Input**
+Collect the investment `amount` (minimum ₦5,000).
+
+**2. Step 1: Backend Initiation**
+Call the backend to register the intent and generate a secure `txn_ref`.
+```javascript
+POST /api/v1/investments/initiate
+{
+  "farm_id": "...",
+  "amount": 10000 // Naira
+}
+```
+Response `data` contains: `txn_ref`, `amount_kobo`, `merchant_code`, `payment_item_id`, `customer_email`, `customer_name`.
+
+**3. Step 2: Load Interswitch Script**
+Include the Interswitch Inline Checkout script in your `index.html` or load it dynamically:
+```html
+<script src="https://newwebpay.qa.interswitchng.com/inline-checkout.js"></script>
+```
+
+**4. Step 3: Launch WebPay**
+Call `window.webpayCheckout` using the parameters received from the backend:
+```javascript
+const params = {
+    merchant_code: data.merchant_code,
+    pay_item_id: data.payment_item_id,
+    txn_ref: data.txn_ref,
+    amount: data.amount_kobo,
+    currency: 566, // Naira ISO code
+    cust_name: data.customer_name,
+    cust_email: data.customer_email,
+    mode: 'TEST', // Change to 'LIVE' for production
+    onComplete: (response) => {
+        // Step 4: Server-side Verification
+        verifyPayment(data.txn_ref);
+    }
+};
+
+window.webpayCheckout(params);
+```
+
+**5. Step 4: Reliable Verification**
+*Never* trust the browser-side response for the final outcome. You **must** call the backend verification endpoint:
+```javascript
+POST /api/v1/investments/verify
+{
+  "txn_ref": "AGF-XXXXX"
+}
+```
+- If `status: "confirmed"` → show success lottie/toast → redirect to "My Investments" dashboard.
+- If `status: "failed"` → show error message with `failure_reason`.
+- If `status: "pending"` → show "Processing..." and offer a "Retry Verification" button.
+
 ### Task 18 — Farmer Dashboard Pages
 
 The farmer dashboard always shows the trust score card in a visible position (e.g. top of the overview tab). It reflects the current values from global state — no separate fetch needed.
@@ -536,7 +598,7 @@ This colour system applies everywhere a tier appears: farmer dashboard, farm lis
 | Route protection            | ✅ Ready to build |
 | Farm CRUD                   | ✅ Live (2-Step)  |
 | Admin Dashboard API (2A)    | ✅ Live           |
-| Investments API             | ⏳ Coming soon    |
+| Investments API             | ✅ Live (2C)      |
 | Milestone proof submissions | ✅ Live           |
 | Payouts API                 | ⏳ Coming soon    |
 
