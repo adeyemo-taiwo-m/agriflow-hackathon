@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import api from '../utils/api';
 import KYCModal from '../components/KYCModal';
 import { mockFarmerFarms, cropTypes, nigeriaStates } from '../data/mockData';
 import EmptyState from '../components/EmptyState';
@@ -96,12 +97,37 @@ function LiveLocationCapture({ onLocationCapture, onClear }) {
 function FarmCreationForm({ onDone }) {
   const [step, setStep] = useState(1);
   const [data, setData] = useState({ name:'', crop:'', state:'', lga:'', size:'', description:'', photos:[], stages:[], totalBudget:'', startDate:'', endDate:'', expectedYield:'', salePrice:'', returnRate:'', location:null, locationPhoto:null });
+  const [crops, setCrops] = useState([]);
+  const [loadingCrops, setLoadingCrops] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { addToast } = useToast();
-  const steps = ['Details','Budget','Timeline','Review'];
+  const { user } = useAuth();
+  const kycComplete = user?.bvn_verified && user?.bank_verified;
+  const steps = ['Details','Budget','Timeline','Review', 'Upload'];
   const u = (k,v) => setData(p=>({...p,[k]:v}));
   const us = (i,k,v) => { const s=[...data.stages]; s[i]={...s[i],[k]:v}; setData(p=>({...p,stages:s})); };
-  const {getRootProps,getInputProps} = useDropzone({ accept:{'image/*':[]}, onDrop: files=>u('photos',[...data.photos,...files.map(f=>URL.createObjectURL(f))]) });
+  const {getRootProps,getInputProps} = useDropzone({ 
+    accept:{'image/*':[]}, 
+    onDrop: files => {
+      // Create preview URLs for display
+      const newPhotos = files.map(f => Object.assign(f, { preview: URL.createObjectURL(f) }));
+      u('photos', [...data.photos, ...newPhotos]);
+    }
+  });
 
+  useEffect(() => {
+    api.get('/crops')
+      .then(res => {
+        setCrops(res.data);
+        setLoadingCrops(false);
+      })
+      .catch(() => {
+        addToast("Failed to load crop references", "error");
+        setLoadingCrops(false);
+      });
+  }, []);
+
+  const selectedCropObj = crops.find(c => c.name === data.crop);
   const ref = data.crop ? CROP_REF[data.crop] : null;
   const sz = parseFloat(data.size) || 0;
   const budgetMax = ref && sz ? ref.costMax * sz * 1.2 : null;
@@ -118,6 +144,81 @@ function FarmCreationForm({ onDone }) {
     const generated = ref.milestones.map(m => ({ name: m.name, amount: Math.round(totalBudget * m.pct / 100).toString(), locked: true }));
     setData(p => ({...p, stages: generated}));
   }, [data.crop]);
+
+  const handleSubmit = async () => {
+    if (!selectedCropObj) return addToast("Please select a valid crop", "error");
+    if (!data.location || !data.locationPhoto) return addToast("Please capture farm location and photo", "error");
+
+    // Validate all required numeric fields before submitting
+    const farmSizeHa = parseFloat(data.size);
+    const totalBudget = parseInt(data.totalBudget);
+    const expectedYield = parseFloat(data.expectedYield);
+    const salePricePerUnit = parseInt(data.salePrice);
+    const returnRate = parseFloat(data.returnRate);
+
+    if (!data.name || data.name.trim().length < 3) return addToast("Farm name must be at least 3 characters", "error");
+    if (!data.state) return addToast("Please select a state", "error");
+    if (!data.lga) return addToast("Please enter an LGA", "error");
+    if (isNaN(farmSizeHa) || farmSizeHa <= 0) return addToast("Please enter a valid farm size", "error");
+    if (!data.description || data.description.trim().length < 20) return addToast("Description must be at least 20 characters", "error");
+    if (isNaN(totalBudget) || totalBudget <= 0) return addToast("Please enter a valid total budget", "error");
+    if (isNaN(expectedYield) || expectedYield <= 0) return addToast("Please enter a valid expected yield", "error");
+    if (isNaN(salePricePerUnit) || salePricePerUnit <= 0) return addToast("Please enter a valid sale price per unit", "error");
+    if (isNaN(returnRate) || returnRate <= 0) return addToast("Please enter a valid return rate", "error");
+    if (!data.startDate) return addToast("Please select a start date", "error");
+    if (!data.endDate) return addToast("Please select a harvest date", "error");
+
+    setIsSubmitting(true);
+    try {
+      // 1. Create Farm Record (Draft)
+      const farmPayload = {
+        crop_reference_id: selectedCropObj.id,
+        name: data.name,
+        state: data.state,
+        lga: data.lga,
+        farm_size_ha: farmSizeHa,
+        description: data.description,
+        total_budget: totalBudget,
+        expected_yield: expectedYield,
+        sale_price_per_unit: salePricePerUnit,
+        return_rate: returnRate / 100,
+        start_date: data.startDate,
+        harvest_date: data.endDate
+      };
+
+      const createRes = await api.post('/farms/', farmPayload);
+      const farmId = createRes.data.data.id;
+
+      // 2. Upload Files & Location (Finalize Submission)
+      const formData = new FormData();
+      formData.append('latitude', data.location.latitude);
+      formData.append('longitude', data.location.longitude);
+      formData.append('location_photo', data.locationPhoto);
+      
+      data.photos.forEach(file => {
+        formData.append('display_photos', file);
+      });
+
+      await api.post(`/farms/${farmId}/uploads`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      addToast('Farm submitted for review!', 'success', 'All details and photos uploaded successfully.');
+      onDone();
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.message || err.response?.data?.detail || "Submission failed";
+      addToast(msg, "error");
+      
+      if (err.response?.status === 403 && msg.toLowerCase().includes('kyc')) {
+        // Handled by layout but just in case
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (loadingCrops) return <div style={{padding:'40px', textAlign:'center'}}>Loading crop data...</div>;
 
   return (
     <div className="farm-form card">
@@ -139,7 +240,7 @@ function FarmCreationForm({ onDone }) {
             <div className="form-group"><label className="form-label">Crop</label>
               <select className="form-input form-select" value={data.crop} onChange={e=>u('crop',e.target.value)}>
                 <option value="">Select crop</option>
-                {Object.keys(CROP_REF).map(c=><option key={c}>{c}</option>)}
+                {crops.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </div>
             <div className="form-group"><label className="form-label">State</label>
@@ -157,7 +258,6 @@ function FarmCreationForm({ onDone }) {
             <div className="form-group"><label className="form-label">Farm Size (ha)</label><input className="form-input" type="number" value={data.size} onChange={e=>u('size',e.target.value)} placeholder="e.g. 2"/></div>
           </div>
 
-          {/* Crop suggestion card */}
           {ref && sz>0 && (
             <div style={{background:'var(--color-primary-light)',border:'1px solid var(--color-primary)',borderRadius:'12px',padding:'16px 20px'}}>
               <p style={{fontWeight:700,fontSize:'13px',color:'var(--color-primary)',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>🌱 AgriFlow suggests for {data.crop} · {sz} ha</p>
@@ -174,33 +274,10 @@ function FarmCreationForm({ onDone }) {
                   </div>
                 ))}
               </div>
-              <div style={{marginTop:'12px',borderTop:'1px solid var(--color-primary)',paddingTop:'10px'}}>
-                <p style={{fontSize:'11px',fontWeight:600,color:'var(--color-primary)',marginBottom:'6px'}}>AUTO-GENERATED MILESTONES</p>
-                <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
-                  {ref.milestones.map((m,i)=>(
-                    <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'var(--color-primary)'}}>
-                      <span>{i+1}. {m.name}</span>
-                      <span style={{fontWeight:600}}>{m.pct}% · Week {m.week}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
           <div className="form-group"><label className="form-label">Description</label><textarea className="form-input form-textarea" rows={4} value={data.description} onChange={e=>u('description',e.target.value)} placeholder="Describe your farm for investors…"/></div>
-          
-          <LiveLocationCapture 
-            onLocationCapture={(loc, photo) => { u('location', loc); u('locationPhoto', photo); }}
-            onClear={() => { u('location', null); u('locationPhoto', null); }}
-          />
-
-          <div className="form-group">
-            <label className="form-label">Display Photos</label>
-            <p style={{fontSize:'12px',color:'var(--color-text-secondary)',marginBottom:'8px'}}>Upload high-quality pictures to display on your investor farm page (you can select from gallery).</p>
-            <div {...getRootProps()} className="dropzone"><input {...getInputProps()}/><span className="dropzone-inner">📎 Drag photos here or click to browse</span></div>
-            {data.photos.length>0 && <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'8px'}}>{data.photos.map((u,i)=><img key={i} src={u} alt="" style={{width:'80px',height:'80px',objectFit:'cover',borderRadius:'8px'}}/>)}</div>}
-          </div>
         </div>
       )}
 
@@ -295,37 +372,68 @@ function FarmCreationForm({ onDone }) {
               <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px'}}>⚠ Exceeds the maximum allowed return for {data.crop} ({ref.maxReturn}%). AgriFlow only allows data-backed returns.</p>
             )}
           </div>
-          {data.expectedYield && data.salePrice && (
-            <div style={{padding:'12px 16px',background:'var(--color-primary-light)',borderRadius:'8px',fontSize:'13px',color:'var(--color-primary)',fontWeight:500}}>
-              Estimated gross revenue: <span className="text-mono">₦{(parseFloat(data.expectedYield)*parseFloat(data.salePrice)).toLocaleString()}</span>
-              {ref&&sz>0 && <span style={{marginLeft:'8px',fontWeight:400,color:'var(--color-text-secondary)'}}>· Reference range: ₦{(revMin/1000).toFixed(0)}k – ₦{(revMax/1000000).toFixed(1)}M</span>}
-            </div>
-          )}
         </div>
       )}
 
       {step===4 && (
         <div className="fsec">
-          <h3 className="fstitle">Review &amp; Submit</h3>
+          <h3 className="fstitle">Review Details</h3>
           <div style={{border:'1px solid var(--color-border)',borderRadius:'12px',overflow:'hidden',marginBottom:'16px'}}>
             {[['Farm Name',data.name],['Crop',data.crop],['Location',`${data.state}, ${data.lga}`],['Size',`${data.size} ha`],['Budget',`₦${totalBudget.toLocaleString()}`],['Start',data.startDate],['Harvest',data.endDate],['Yield',`${data.expectedYield} ${ref?.unit||'tons'}`],['Return Rate',`${data.returnRate}%`]].map(([l,v])=>(
               <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'11px 16px',borderBottom:'1px solid var(--color-border)',fontSize:'14px'}}><span style={{color:'var(--color-text-secondary)'}}>{l}</span><span style={{fontWeight:500}}>{v||'—'}</span></div>
             ))}
           </div>
-          {ref && data.stages.length>0 && (
-            <div style={{marginBottom:'16px'}}>
-              <p style={{fontSize:'13px',fontWeight:600,marginBottom:'8px'}}>Auto-Generated Milestones</p>
-              {data.stages.map((s,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:'13px',padding:'6px 0',borderBottom:'1px solid var(--color-border)'}}><span>{i+1}. {s.name}</span><span className="text-mono" style={{color:'var(--color-primary)'}}>₦{(parseInt(s.amount)||0).toLocaleString()}</span></div>)}
-            </div>
-          )}
-          <div style={{padding:'14px 16px',background:'var(--color-primary-light)',borderRadius:'8px',fontSize:'13px',color:'var(--color-primary)',marginBottom:'16px'}}>Our team will review your farm within 24 hours. All numbers have been validated against AgriFlow's crop reference database.</div>
-          <button className="btn btn-solid btn-full btn-lg" onClick={()=>{addToast('Farm submitted for review!','success','Validated against crop reference. We\'ll review within 24h.'); onDone();}}>Submit for Review</button>
+          <div style={{padding:'14px 16px',background:'var(--color-primary-light)',borderRadius:'8px',fontSize:'13px',color:'var(--color-primary)',marginBottom:'16px'}}>Please confirm all text details are correct before proceeding to photo uploads and GPS anchoring.</div>
+        </div>
+      )}
+
+      {step===5 && (
+        <div className="fsec">
+          <h3 className="fstitle">Location & Photos</h3>
+          <p style={{fontSize:'14px', color:'var(--color-text-secondary)', marginBottom:'12px'}}>Final step: Anchor your farm with a live location photo and upload display pictures for investors.</p>
+          
+          <LiveLocationCapture 
+            onLocationCapture={(loc, photo) => { u('location', loc); u('locationPhoto', photo); }}
+            onClear={() => { u('location', null); u('locationPhoto', null); }}
+          />
+
+          <div className="form-group" style={{marginTop:'8px'}}>
+            <label className="form-label">Display Photos (for Investors)</label>
+            <div {...getRootProps()} className="dropzone"><input {...getInputProps()}/><span className="dropzone-inner">📎 Drag photos here or click to browse</span></div>
+            {data.photos.length > 0 && (
+              <div style={{display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'12px'}}>
+                {data.photos.map((file, i) => (
+                  <div key={i} style={{position:'relative'}}>
+                    <img src={file.preview} alt="" style={{width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px', border:'1px solid var(--color-border)'}}/>
+                    <button 
+                      onClick={() => setData(p => ({...p, photos: p.photos.filter((_, idx) => idx !== i)}))}
+                      style={{position:'absolute', top:'-6px', right:'-6px', background:'var(--color-danger)', color:'#fff', border:'none', borderRadius:'50%', width:'20px', height:'20px', fontSize:'12px', cursor:'pointer'}}
+                    >✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{marginTop:'16px', padding:'16px', background:'rgba(16, 185, 129, 0.05)', border:'1px solid var(--color-primary)', borderRadius:'12px'}}>
+             <p style={{fontSize:'13px', fontWeight:600, color:'var(--color-primary)', marginBottom:'4px'}}>Ready for Submission</p>
+             <p style={{fontSize:'12px', color:'var(--color-text-secondary)', lineHeight:1.5}}>By submitting, you certify that the location photo was taken on-site. AgriFlow uses Smart Guard GPS validation to detect fraud.</p>
+          </div>
+
+          <button 
+            className="btn btn-solid btn-full btn-lg" 
+            disabled={!kycComplete || isSubmitting || !data.location || !data.locationPhoto} 
+            onClick={handleSubmit}
+            style={{marginTop:'12px'}}
+          >
+            {isSubmitting ? 'Submitting...' : 'Submit for Review'}
+          </button>
         </div>
       )}
 
       <div style={{display:'flex',marginTop:'24px',paddingTop:'20px',borderTop:'1px solid var(--color-border)'}}>
-        {step>1 && <button className="btn btn-ghost" onClick={()=>setStep(s=>s-1)}>← Back</button>}
-        {step<4 && <button className="btn btn-solid" style={{marginLeft:'auto'}} onClick={()=>setStep(s=>s+1)}>Continue →</button>}
+        {step>1 && <button className="btn btn-ghost" onClick={()=>setStep(s=>s-1)} disabled={isSubmitting}>← Back</button>}
+        {step<5 && <button className="btn btn-solid" style={{marginLeft:'auto'}} onClick={()=>setStep(s=>s+1)}>Continue →</button>}
       </div>
 
       <style>{`.farm-form{padding:28px}.form-steps{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px;align-items:center}.fstep{width:26px;height:26px;border-radius:50%;border:2px solid var(--color-border);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--color-text-secondary)}.fstep.act{border-color:var(--color-primary);background:var(--color-primary);color:#fff}.fstep.done{border-color:var(--color-primary);background:var(--color-primary-light);color:var(--color-primary)}.fsec{display:flex;flex-direction:column;gap:16px}.fstitle{font-size:18px;font-weight:600}.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}.dropzone{border:2px dashed var(--color-border);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .2s}.dropzone:hover{border-color:var(--color-primary)}.dropzone-inner{font-size:14px;color:var(--color-text-secondary)}@media(max-width:600px){.frow{grid-template-columns:1fr}}`}</style>
@@ -367,13 +475,39 @@ function ProofUpload({ milestone, onSuccess }) {
   };
 
   const handleSubmit = async () => {
+    if (!photo || !location) return;
+
     setSubmitting(true);
-    // Simulate API network call delay
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append('photo', photo);
+      formData.append('gps_latitude', location.latitude);
+      formData.append('gps_longitude', location.longitude);
+      formData.append('gps_accuracy_m', location.accuracy);
+      if (note) formData.append('note', note);
+
+      const res = await api.post(`/milestones/${milestone.id}/proof`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      const data = res.data.data || res.data;
+      const flag = data.gps_flag;
+
+      if (flag === 'fail') {
+        addToast("GPS Distance Failure", "error", "You appear to be too far from the farm. Please stand on the registered land.");
+      } else if (flag === 'warning') {
+        addToast("Location Warning", "warning", "You are 1km-5km from the farm. This proof will require manual admin review.");
+        onSuccess(milestone.id);
+      } else {
+        addToast("Proof Submitted ✅", "success", "GPS Verified. Your milestone is now under review.");
+        onSuccess(milestone.id);
+      }
+    } catch (err) {
+      console.error(err);
+      addToast(err.response?.data?.detail || "Submission failed", "error");
+    } finally {
       setSubmitting(false);
-      onSuccess(milestone.id);
-      addToast('Proof submitted!', 'success', 'Photo and location logged. Admin will review shortly.');
-    }, 1200);
+    }
   };
 
   return (
@@ -416,63 +550,95 @@ function ProofUpload({ milestone, onSuccess }) {
 }
 
 function MilestonesTab() {
-  const { user } = useAuth();
-  const [milestones, setMilestones] = useState(user?.isNewUser ? [] : [
-    { id:'m1', name:'Land Preparation', dueDate:'2026-01-15', status:'verified', proofStatus:'approved', note:'GPS verified.' },
-    { id:'m2', name:'Fertilizer Application', dueDate:'2026-02-10', status:'in_progress', proofStatus:'rejected', note:'Photo is blurry and GPS coordinates do not match the farm location. Please resubmit with a clearer image taken on-site.' },
-    { id:'m3', name:'Weeding', dueDate:'2026-03-01', status:'pending', proofStatus:null, note:null },
-  ]);
+  const [farms, setFarms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { addToast } = useToast();
 
-  if (user?.isNewUser) {
+  const fetchFarms = async () => {
+    try {
+      const res = await api.get('/farms/my-farms');
+      setFarms(res.data.data);
+    } catch (err) {
+      addToast("Failed to load milestones", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFarms();
+  }, []);
+
+  const handleSuccess = () => {
+    fetchFarms(); // Refresh to show updated status
+  };
+
+  if (loading) return <div style={{padding:'40px', textAlign:'center'}}>Loading your milestones...</div>;
+
+  const activeFarms = farms.filter(f => f.farm_status !== 'DRAFT');
+
+  if (activeFarms.length === 0) {
     return (
       <div>
         <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'8px',fontFamily:'var(--font-heading)'}}>Milestones</h1>
         <div className="card" style={{padding:'40px',textAlign:'center'}}>
-           <p style={{color:'var(--color-text-secondary)',marginBottom:'16px'}}>You don't have any active farms with milestones yet.</p>
+           <p style={{color:'var(--color-text-secondary)',marginBottom:'16px'}}>You don't have any active farms with milestones yet. Once your farm is approved, milestones will appear here.</p>
         </div>
       </div>
     );
   }
 
-  const handleSuccess = (id) => {
-    setMilestones(prev => prev.map(m => m.id === id ? { ...m, proofStatus: 'under_review' } : m));
-  };
-
   return (
     <div>
       <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'8px',fontFamily:'var(--font-heading)'}}>Milestones</h1>
-      <p style={{color:'var(--color-text-secondary)',marginBottom:'24px',fontSize:'14px'}}>Oduya Maize Farm</p>
-      <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
-        {milestones.map(m=>(
-          <div key={m.id} className="card" style={{padding:'20px'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
-              <div><h3 style={{fontWeight:600}}>{m.name}</h3><p style={{fontSize:'13px',color:'var(--color-text-secondary)'}}>Due: {new Date(m.dueDate).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</p></div>
-              <span className={`badge badge-${m.status==='verified'?'active':m.status==='in_progress'?'pending':'draft'}`}>{m.status==='verified'?'Verified':m.status==='in_progress'?'In Progress':'Pending'}</span>
+      <p style={{color:'var(--color-text-secondary)',marginBottom:'24px',fontSize:'14px'}}>Track and submit proof for your active farm milestones.</p>
+      
+      <div style={{display:'flex',flexDirection:'column',gap:'32px'}}>
+        {activeFarms.map(farm => (
+          <div key={farm.id}>
+            <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px'}}>
+              <div style={{width:'32px', height:'32px', borderRadius:'8px', background:'var(--color-primary)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:'14px'}}>
+                {farm.crop_name[0]}
+              </div>
+              <div>
+                <h2 style={{fontSize:'18px', fontWeight:700}}>{farm.name}</h2>
+                <p style={{fontSize:'12px', color:'var(--color-text-secondary)'}}>{farm.crop_name} · {farm.state}</p>
+              </div>
             </div>
-            {m.proofStatus && (
-              <div style={{marginBottom:'12px'}}>
-                <div style={{display:'inline-flex',alignItems:'center',gap:'6px',padding:'5px 12px',borderRadius:'999px',fontSize:'13px',background:m.proofStatus==='approved'?'var(--color-primary-light)':m.proofStatus==='rejected'?'rgba(181,74,47,0.1)':'var(--color-accent-light)',color:m.proofStatus==='approved'?'var(--color-primary)':m.proofStatus==='rejected'?'var(--color-danger)':'var(--color-accent)'}}>
-                  {m.proofStatus==='approved'?'✓ Approved':m.proofStatus==='rejected'?'✗ Proof Rejected':'⟳ Pending Review'}
-                  {m.proofStatus==='approved' && m.note && <span style={{fontStyle:'italic',marginLeft:'6px'}}>— {m.note}</span>}
-                </div>
-                {m.proofStatus==='rejected' && m.note && (
-                  <div style={{marginTop:'10px',padding:'12px 14px',background:'rgba(181,74,47,0.06)',borderLeft:'3px solid var(--color-danger)',borderRadius:'0 6px 6px 0',fontSize:'13px',lineHeight:1.6}}>
-                    <strong style={{color:'var(--color-danger)',display:'block',marginBottom:'4px'}}>Admin note:</strong>
-                    {m.note}
+
+            <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+              {farm.milestones.map(m => (
+                <div key={m.id} className="card" style={{padding:'20px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
+                    <div>
+                      <h3 style={{fontWeight:600}}>{m.name}</h3>
+                      <p style={{fontSize:'13px',color:'var(--color-text-secondary)'}}>Expected Week: {m.expected_week}</p>
+                    </div>
+                    <span className={`badge badge-${m.status==='verified'?'active':m.status==='under_review'?'pending':'draft'}`}>
+                      {m.status==='verified'?'Verified':m.status==='under_review'?'Under Review':m.status==='pending'?'Pending':'Active'}
+                    </span>
                   </div>
-                )}
-              </div>
-            )}
-            
-            {/* Show camera proof uploader only if it's pending proof and not verified/under_review */}
-            {m.status !== 'verified' && m.proofStatus !== 'under_review' && (
-              <ProofUpload milestone={m} onSuccess={handleSuccess} />
-            )}
-            {m.proofStatus === 'under_review' && (
-              <div style={{marginTop:'16px',padding:'16px',background:'var(--color-surface)',borderRadius:'8px',fontSize:'13px',color:'var(--color-text-secondary)',textAlign:'center'}}>
-                Proof submitted via device camera with live GPS coordinates. Awaiting admin review.
-              </div>
-            )}
+                  
+                  {m.status === 'rejected' && (
+                    <div style={{marginBottom:'12px', padding:'12px 14px', background:'rgba(181,74,47,0.06)', borderLeft:'3px solid var(--color-danger)', borderRadius:'0 6px 6px 0', fontSize:'13px', lineHeight:1.6}}>
+                      <strong style={{color:'var(--color-danger)', display:'block', marginBottom:'4px'}}>Admin note:</strong>
+                      Please resubmit with a clearer image taken on-site at the correct farm location.
+                    </div>
+                  )}
+                  
+                  {/* Show camera proof uploader only if it's pending proof and not verified/under_review */}
+                  {m.status !== 'verified' && m.status !== 'under_review' && (
+                    <ProofUpload milestone={m} onSuccess={handleSuccess} />
+                  )}
+                  
+                  {m.status === 'under_review' && (
+                    <div style={{marginTop:'16px',padding:'16px',background:'var(--color-surface)',borderRadius:'8px',fontSize:'13px',color:'var(--color-text-secondary)',textAlign:'center'}}>
+                      Proof submitted via device camera with live GPS coordinates. Awaiting admin review.
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
@@ -621,7 +787,7 @@ export default function FarmerDashboard() {
               }}>🔒</div>
               <div>
                 <h4 style={{ color: 'var(--color-text-primary)', fontWeight: 600, fontSize: '15px', marginBottom: '6px' }}>
-                  Verification Required to List Farms
+                  Complete your verification to start listing farms
                 </h4>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
                   <span style={{ 
@@ -631,7 +797,7 @@ export default function FarmerDashboard() {
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    {user?.bvn_verified ? '✅ BVN' : '⭕ Verify BVN'}
+                    {user?.bvn_verified ? '✅ BVN Verified' : '⭕ Verify BVN'}
                   </span>
                   <span style={{ color: 'var(--color-text-muted)' }}>→</span>
                   <span style={{ 
@@ -641,7 +807,7 @@ export default function FarmerDashboard() {
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    {user?.bank_verified ? '✅ Bank' : '⭕ Add Bank'}
+                    {user?.bank_verified ? '✅ Bank Account Added' : 'Add Bank Account'}
                   </span>
                 </div>
               </div>
@@ -660,6 +826,24 @@ export default function FarmerDashboard() {
         )}
         {tab==='farms' && (
           <>
+            {user?.bvn_verified && (
+              <div className="card" style={{ padding: '20px 24px', marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, var(--color-primary-light) 0%, #fff 100%)', border: '1px solid var(--color-primary)' }}>
+                <div>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-primary)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Your Trust Score</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '32px', fontWeight: 800, color: 'var(--color-primary)' }}>{user?.trust_score || 0}</span>
+                    <span style={{ fontSize: '18px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
+                    <span className="badge badge-active" style={{ marginLeft: '12px', background: 'var(--color-primary)', color: '#fff' }}>⭐ {user?.trust_tier || 'Emerging Farmer'}</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', fontSize: '13px', color: 'var(--color-text-secondary)', maxWidth: '240px' }}>
+                  {user?.bank_verified 
+                    ? "🎉 You have full access! Keep completing milestones to grow your score."
+                    : "Add your bank account to reach 'Verified Farmer' status."}
+                </div>
+              </div>
+            )}
+
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'28px'}}>
               <h1 style={{fontSize:'26px',fontWeight:700,fontFamily:'var(--font-heading)'}}>My Farms</h1>
               <button className="btn btn-solid btn-sm" onClick={() => kycComplete ? handleTabChange('add') : setIsKycOpen(true)}>+ Add Farm</button>
