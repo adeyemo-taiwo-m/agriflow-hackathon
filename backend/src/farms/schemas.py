@@ -65,11 +65,10 @@ class FarmOut(BaseModel):
     farm_status: str
     latitude: Optional[float]
     longitude: Optional[float]
-    display_photos_public_id: List[str]
-    location_photo_public_id: Optional[str]
     
     listing_display_picture_url: List[str] = []
     full_display_picture_url: List[str] = []
+    location_photo_url: Optional[str] = None
     
     farmer: Optional[FarmerPublicOut] = None
     milestones: List[MilestoneOut] = []
@@ -95,10 +94,9 @@ class FarmListOut(BaseModel):
     farm_status: str
     latitude: Optional[float]
     longitude: Optional[float]
-    display_photos_public_id: List[str]
-    location_photo_public_id: Optional[str]
     
     listing_display_picture_url: List[str] = []
+    location_photo_url: Optional[str] = None
     
     farmer: Optional[FarmerPublicOut] = None
     created_at: datetime

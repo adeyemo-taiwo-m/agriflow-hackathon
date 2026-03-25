@@ -45,8 +45,9 @@ class AdminFarmOut(BaseModel):
     status: str
     latitude: Optional[float]
     longitude: Optional[float]
-    location_photo_public_id: Optional[str]
-    display_photos_public_id: List[str]
+    location_photo_url: Optional[str]
+    listing_display_picture_url: List[str]
+    full_display_picture_url: List[str]
     rejection_reason: Optional[str]
     farmer: AdminFarmerOut
     milestones: List[MilestoneOut]

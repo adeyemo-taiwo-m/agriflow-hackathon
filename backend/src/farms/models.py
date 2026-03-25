@@ -54,10 +54,11 @@ class Farm(SQLModel, table=True):
 
     location_verified: bool = Field(default=False)
 
-    location_photo_public_id: Optional[str] = Field(default=None)
+    location_photo_public_id: Optional[str] = Field(default=None, exclude=True)
     display_photos_public_id: Optional[list] = Field(
         default_factory=list,
-        sa_column=Column(pg.JSONB)
+        sa_column=Column(pg.JSONB),
+        exclude=True
     )
 
     rejection_reason: Optional[str] = Field(default=None)
@@ -137,4 +138,22 @@ class Farm(SQLModel, table=True):
             full_display_picture_urls.append(url)
              
         return full_display_picture_urls
+
+    @computed_field
+    @property
+    def location_photo_url(self) -> Optional[str]:
+        if not self.location_photo_public_id:
+            return None
+        
+        url, options = cloudinary.utils.cloudinary_url(
+            self.location_photo_public_id,
+            width=800,
+            height=800,
+            crop="fill",
+            gravity="auto",
+            quality="auto:best",
+            fetch_format="auto",
+            dpr="auto"
+        )
+        return url
             
