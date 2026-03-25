@@ -5,7 +5,13 @@ import uuid
 
 from src.db.main import get_session
 from src.farms.services import FarmServices
-from src.farms.schemas import FarmCreate, UploadFarmLocations, FarmOut, FarmListOut
+from src.farms.schemas import (
+    FarmCreate,
+    UploadFarmLocations,
+    FarmOutResponse,
+    FarmOutListResponse,
+    FarmListResponse,
+)
 from src.utils.dependencies import get_current_farmer
 from src.utils.logger import logger
 
@@ -14,7 +20,7 @@ farm_router = APIRouter()
 def get_farm_services() -> FarmServices:
     return FarmServices()
 
-@farm_router.post('/', status_code=status.HTTP_201_CREATED)
+@farm_router.post('/', status_code=status.HTTP_201_CREATED, response_model=FarmOutResponse)
 async def create_farm(
     farm_input: FarmCreate,
     current_farmer = Depends(get_current_farmer),
@@ -30,7 +36,7 @@ async def create_farm(
         "data": farm
     }
 
-@farm_router.post('/{farm_id}/uploads', status_code=status.HTTP_200_OK)
+@farm_router.post('/{farm_id}/uploads', status_code=status.HTTP_200_OK, response_model=FarmOutResponse)
 async def upload_farm_details(
     farm_id: uuid.UUID,
     latitude: float = Form(..., ge=4.0, le=14.0),
@@ -60,7 +66,7 @@ async def upload_farm_details(
         "data": farm
     }
 
-@farm_router.get('/my-farms', status_code=status.HTTP_200_OK, response_model=dict)
+@farm_router.get('/my-farms', status_code=status.HTTP_200_OK, response_model=FarmOutListResponse)
 async def get_my_farms(
     current_farmer = Depends(get_current_farmer),
     session: AsyncSession = Depends(get_session),
@@ -73,7 +79,7 @@ async def get_my_farms(
         "data": farms
     }
 
-@farm_router.get('/', status_code=status.HTTP_200_OK)
+@farm_router.get('/', status_code=status.HTTP_200_OK, response_model=FarmListResponse)
 async def get_farms(
     crop_name: Optional[str] = None,
     state: Optional[str] = None,
@@ -88,7 +94,7 @@ async def get_farms(
         "data": farms
     }
 
-@farm_router.get('/{farm_id}', status_code=status.HTTP_200_OK)
+@farm_router.get('/{farm_id}', status_code=status.HTTP_200_OK, response_model=FarmOutResponse)
 async def get_farm(
     farm_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),

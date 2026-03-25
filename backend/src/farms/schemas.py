@@ -103,6 +103,24 @@ class FarmListOut(BaseModel):
     farmer: Optional[FarmerPublicOut] = None
     created_at: datetime
 
+
+class FarmOutResponse(BaseModel):
+    success: bool
+    message: str
+    data: FarmOut
+
+
+class FarmOutListResponse(BaseModel):
+    success: bool
+    message: str
+    data: List[FarmOut]
+
+
+class FarmListResponse(BaseModel):
+    success: bool
+    message: str
+    data: List[FarmListOut]
+
 class UploadFarmLocations(BaseModel):
     # Latitude for Nigeria is roughly 4.0 to 14.0
     latitude: float = Field(..., ge=4.0, le=14.0)
