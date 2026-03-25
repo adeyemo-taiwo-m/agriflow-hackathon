@@ -171,7 +171,7 @@ export default function InvestorDashboard() {
             }}>🔒</div>
             <div>
               <h4 style={{ color: 'var(--color-text-primary)', fontWeight: 600, fontSize: '15px', marginBottom: '6px' }}>
-                Verification Required to Start Investing
+                Complete your verification to start investing
               </h4>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
                 <span style={{ 
@@ -181,7 +181,7 @@ export default function InvestorDashboard() {
                   alignItems: 'center',
                   gap: '4px'
                 }}>
-                  {user?.bvn_verified ? '✅ BVN' : '⭕ Verify BVN'}
+                  {user?.bvn_verified ? '✅ BVN Verified' : '⭕ Verify BVN'}
                 </span>
                 <span style={{ color: 'var(--color-text-muted)' }}>→</span>
                 <span style={{ 
@@ -191,7 +191,7 @@ export default function InvestorDashboard() {
                   alignItems: 'center',
                   gap: '4px'
                 }}>
-                  {user?.bank_verified ? '✅ Bank Account' : '⭕ Add Bank'}
+                  {user?.bank_verified ? '✅ Bank Account Added' : 'Add Bank Account'}
                 </span>
               </div>
             </div>

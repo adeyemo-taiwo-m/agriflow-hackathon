@@ -12,7 +12,7 @@ def get_bank_services() -> BankServices:
     return BankServices()
 
 
-@bank_router.get('/all', response_model=BankListResponse, status_code=status.HTTP_200_OK)
+@bank_router.get('', response_model=BankListResponse, status_code=status.HTTP_200_OK)
 async def get_all_banks(
     session: AsyncSession = Depends(get_session),
     bank_services: BankServices = Depends(get_bank_services)

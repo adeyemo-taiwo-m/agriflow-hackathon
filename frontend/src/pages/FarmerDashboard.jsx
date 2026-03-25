@@ -97,6 +97,8 @@ function FarmCreationForm({ onDone }) {
   const [step, setStep] = useState(1);
   const [data, setData] = useState({ name:'', crop:'', state:'', lga:'', size:'', description:'', photos:[], stages:[], totalBudget:'', startDate:'', endDate:'', expectedYield:'', salePrice:'', returnRate:'', location:null, locationPhoto:null });
   const { addToast } = useToast();
+  const { user } = useAuth();
+  const kycComplete = user?.bvn_verified && user?.bank_verified;
   const steps = ['Details','Budget','Timeline','Review'];
   const u = (k,v) => setData(p=>({...p,[k]:v}));
   const us = (i,k,v) => { const s=[...data.stages]; s[i]={...s[i],[k]:v}; setData(p=>({...p,stages:s})); };
@@ -319,7 +321,7 @@ function FarmCreationForm({ onDone }) {
             </div>
           )}
           <div style={{padding:'14px 16px',background:'var(--color-primary-light)',borderRadius:'8px',fontSize:'13px',color:'var(--color-primary)',marginBottom:'16px'}}>Our team will review your farm within 24 hours. All numbers have been validated against AgriFlow's crop reference database.</div>
-          <button className="btn btn-solid btn-full btn-lg" onClick={()=>{addToast('Farm submitted for review!','success','Validated against crop reference. We\'ll review within 24h.'); onDone();}}>Submit for Review</button>
+          <button className="btn btn-solid btn-full btn-lg" disabled={!kycComplete} onClick={()=>{addToast('Farm submitted for review!','success','Validated against crop reference. We\'ll review within 24h.'); onDone();}}>Submit for Review</button>
         </div>
       )}
 
@@ -621,7 +623,7 @@ export default function FarmerDashboard() {
               }}>🔒</div>
               <div>
                 <h4 style={{ color: 'var(--color-text-primary)', fontWeight: 600, fontSize: '15px', marginBottom: '6px' }}>
-                  Verification Required to List Farms
+                  Complete your verification to start listing farms
                 </h4>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
                   <span style={{ 
@@ -631,7 +633,7 @@ export default function FarmerDashboard() {
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    {user?.bvn_verified ? '✅ BVN' : '⭕ Verify BVN'}
+                    {user?.bvn_verified ? '✅ BVN Verified' : '⭕ Verify BVN'}
                   </span>
                   <span style={{ color: 'var(--color-text-muted)' }}>→</span>
                   <span style={{ 
@@ -641,7 +643,7 @@ export default function FarmerDashboard() {
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    {user?.bank_verified ? '✅ Bank' : '⭕ Add Bank'}
+                    {user?.bank_verified ? '✅ Bank Account Added' : 'Add Bank Account'}
                   </span>
                 </div>
               </div>
@@ -660,6 +662,24 @@ export default function FarmerDashboard() {
         )}
         {tab==='farms' && (
           <>
+            {user?.bvn_verified && (
+              <div className="card" style={{ padding: '20px 24px', marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, var(--color-primary-light) 0%, #fff 100%)', border: '1px solid var(--color-primary)' }}>
+                <div>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-primary)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Your Trust Score</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '32px', fontWeight: 800, color: 'var(--color-primary)' }}>{user?.trust_score || 0}</span>
+                    <span style={{ fontSize: '18px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
+                    <span className="badge badge-active" style={{ marginLeft: '12px', background: 'var(--color-primary)', color: '#fff' }}>⭐ {user?.trust_tier || 'Emerging Farmer'}</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', fontSize: '13px', color: 'var(--color-text-secondary)', maxWidth: '240px' }}>
+                  {user?.bank_verified 
+                    ? "🎉 You have full access! Keep completing milestones to grow your score."
+                    : "Add your bank account to reach 'Verified Farmer' status."}
+                </div>
+              </div>
+            )}
+
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'28px'}}>
               <h1 style={{fontSize:'26px',fontWeight:700,fontFamily:'var(--font-heading)'}}>My Farms</h1>
               <button className="btn btn-solid btn-sm" onClick={() => kycComplete ? handleTabChange('add') : setIsKycOpen(true)}>+ Add Farm</button>
