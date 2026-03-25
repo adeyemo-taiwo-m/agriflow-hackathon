@@ -77,11 +77,11 @@ async def get_my_farms(
 async def get_farms(
     crop_name: Optional[str] = None,
     state: Optional[str] = None,
-    status: str = "active",
+    farm_status: str = "active",
     session: AsyncSession = Depends(get_session),
     farm_services: FarmServices = Depends(get_farm_services)
 ):
-    farms = await farm_services.get_farms(session, crop_name, state, status)
+    farms = await farm_services.get_farms(session, crop_name, state, farm_status)
     return {
         "success": True,
         "message": "Farms retrieved successfully",

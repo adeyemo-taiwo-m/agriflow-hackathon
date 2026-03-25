@@ -95,12 +95,11 @@ class FarmServices:
         farm_data = user_input.model_dump()
         farm_data.pop("crop_reference_id", None)
         new_farm = Farm(
-            farm_data,
+            **farm_data,
             farmer_id=farmer.uid,
             crop_reference_id=crop.id,
             crop_name=crop.name,
-            funding_goal=user_input.total_budget,
-            farm_status=FarmStatus.PENDING
+            farm_status=FarmStatus.DRAFT
         )
         
         try:
@@ -128,6 +127,12 @@ class FarmServices:
                 detail="You do not have permission to update this farm"
             )
 
+        if farm.farm_status != FarmStatus.DRAFT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only draft farms can be submitted for review"
+            )
+
         
         location_upload = await self.file_upload_services.upload_image(location_photo, farm_id, ImageCategory.LOCATION_PHOTO)
         location_public_id = location_upload["public_id"]
@@ -143,6 +148,7 @@ class FarmServices:
         farm.longitude = location_data.longitude
         farm.location_photo_public_id = location_public_id
         farm.display_photos_public_id = display_public_ids
+        farm.farm_status = FarmStatus.PENDING
 
         try:
             session.add(farm)
@@ -158,7 +164,7 @@ class FarmServices:
                     order_number=index + 1,
                     expected_week=template["week"],
                     amount=amount,
-                    farm_status=MilestoneStatus.LOCKED
+                    status=MilestoneStatus.LOCKED
                 )
                 milestones.append(milestone)
             
@@ -193,8 +199,8 @@ class FarmServices:
             )
         return farm
     
-    async def get_farms(self, session: AsyncSession, crop_name: str = None, state: str = None, status: str = "active"):
-        statement = select(Farm).where(Farm.status == status).options(
+    async def get_farms(self, session: AsyncSession, crop_name: str = None, state: str = None, farm_status: str = "active"):
+        statement = select(Farm).where(Farm.farm_status == farm_status).options(
             selectinload(Farm.owner)
         )
         if crop_name:
