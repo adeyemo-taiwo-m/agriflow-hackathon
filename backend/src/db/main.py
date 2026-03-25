@@ -18,6 +18,8 @@ async def init_db():
         from src.crops.models import CropReference
         from src.farms.models import Farm
         from src.milestones.models import Milestone
+        from src.harvest.models import HarvestReport
+        from src.payouts.models import Payout
 
         await conn.run_sync(SQLModel.metadata.create_all)
 

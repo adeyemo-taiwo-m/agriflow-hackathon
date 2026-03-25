@@ -198,3 +198,127 @@ class AdminServices:
             "total_farmers": total_farmers.one() or 0,
             "total_funds_raised": total_funds_raised.one() or 0
         }
+
+from src.harvest.models import HarvestReport, HarvestReportStatus
+from src.payouts.models import Payout, PayoutStatus, RecipientType
+from src.investments.models import Investment, InvestmentStatus
+from src.utils.logger import logger
+from datetime import datetime
+
+class AdminFinancialServices:
+    
+    async def confirm_sales(self, farm_id: uuid.UUID, confirmed_amount_naira: int, session: AsyncSession):
+        # 1. Fetch dependencies
+        farm = await session.get(Farm, farm_id)
+        report_query = await session.exec(select(HarvestReport).where(HarvestReport.farm_id == farm_id))
+        report = report_query.first()
+        
+        if not farm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="farm not found")
+        
+        if not report:
+             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="harvest report not found")
+
+        # 2. Update Report
+        report.admin_confirmed_sales = confirmed_amount_naira
+        report.status = HarvestReportStatus.VERIFIED
+        report.verified_at = datetime.utcnow()
+        session.add(report)
+
+        # 3. THE REVENUE SPLIT MATH (Everything calculated in Naira here)
+        platform_fee = int(confirmed_amount_naira * 0.05)
+        investor_pool = int(confirmed_amount_naira * 0.95)
+        
+        farm_raised_naira = farm.amount_raised / 100 # amount_raised is in kobo!
+
+        if farm_raised_naira == 0:
+             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="cannot confirm sales for farm with no investment")
+
+        # 4. Generate Investor Payouts
+        investments_query = await session.exec(
+            select(Investment).where(
+                Investment.farm_id == farm_id, 
+                Investment.status == InvestmentStatus.CONFIRMED
+            )
+        )
+        investments = investments_query.all()
+
+        total_investor_payouts = 0
+
+        for inv in investments:
+            inv_amount_naira = inv.amount_kobo / 100
+            
+            # Investor Payout = Pool * (Investment / Total Raised)
+            investor_total_share = int(investor_pool * (inv_amount_naira / farm_raised_naira))
+            investor_profit = int(investor_total_share - inv_amount_naira)
+            
+            payout = Payout(
+                farm_id=farm.id,
+                recipient_id=inv.investor_id,
+                recipient_type=RecipientType.INVESTOR,
+                investment_id=inv.id,
+                principal_naira=int(inv_amount_naira),
+                profit_naira=investor_profit,
+                total_amount_naira=investor_total_share
+            )
+            session.add(payout)
+            total_investor_payouts += investor_total_share
+
+        # 5. Generate Farmer Payout
+        farmer_payout_amount = confirmed_amount_naira - total_investor_payouts - platform_fee
+        
+        if farmer_payout_amount > 0:
+            farmer_payout = Payout(
+                farm_id=farm.id,
+                recipient_id=farm.farmer_id,
+                recipient_type=RecipientType.FARMER,
+                principal_naira=0,
+                profit_naira=farmer_payout_amount,
+                total_amount_naira=farmer_payout_amount
+            )
+            session.add(farmer_payout)
+
+        # 6. Update Farm Status
+        farm.farm_status = FarmStatus.COMPLETED
+        session.add(farm)
+        
+        try:
+            await session.commit()
+            logger.info(f"Sales confirmed for farm {farm_id}. Payouts generated.")
+        except Exception as e:
+            logger.error(f"Failed to confirm sales: {str(e)}")
+            await session.rollback()
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="failed to confirm sales")
+        
+        return {"message": "Sales confirmed and payouts generated"}
+
+    async def initiate_payouts(self, farm_id: uuid.UUID, session: AsyncSession):
+        # Fetch waiting payouts
+        query = await session.exec(select(Payout).where(Payout.farm_id == farm_id, Payout.status == PayoutStatus.WAITING))
+        payouts = query.all()
+        
+        if not payouts:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no waiting payouts found for this farm")
+
+        # Mock payout success for Phase 2
+        for p in payouts:
+            p.status = PayoutStatus.COMPLETED
+            p.completed_at = datetime.utcnow()
+            session.add(p)
+            
+        farm = await session.get(Farm, farm_id)
+        if not farm:
+             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="farm not found")
+             
+        farm.farm_status = FarmStatus.PAID_OUT
+        session.add(farm)
+        
+        try:
+            await session.commit()
+            logger.info(f"Payouts initiated for farm {farm_id}. {len(payouts)} payouts completed.")
+        except Exception as e:
+            logger.error(f"Failed to initiate payouts: {str(e)}")
+            await session.rollback()
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="failed to initiate payouts")
+
+        return {"message": f"{len(payouts)} payouts processed successfully"}

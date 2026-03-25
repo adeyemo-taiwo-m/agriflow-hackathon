@@ -115,3 +115,38 @@ async def get_stats(
         "message": "Platform statistics retrieved successfully",
         "data": stats
     }
+
+from pydantic import BaseModel
+from src.admin.services import AdminFinancialServices
+
+admin_fin_svc = AdminFinancialServices()
+
+class ConfirmSalesInput(BaseModel):
+    confirmed_amount_naira: int
+
+@admin_router.post("/farms/{id}/confirm-sales")
+async def admin_confirm_sales(
+    id: uuid.UUID,
+    input_data: ConfirmSalesInput,
+    admin = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    result = await admin_fin_svc.confirm_sales(id, input_data.confirmed_amount_naira, session)
+    return {
+        "success": True, 
+        "message": "sales confirmed successfully", 
+        "data": result
+    }
+
+@admin_router.post("/farms/{id}/initiate-payouts")
+async def admin_initiate_payouts(
+    id: uuid.UUID,
+    admin = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    result = await admin_fin_svc.initiate_payouts(id, session)
+    return {
+        "success": True, 
+        "message": "payouts initiated successfully", 
+        "data": result
+    }

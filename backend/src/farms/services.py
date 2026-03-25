@@ -225,3 +225,47 @@ class FarmServices:
         result = await session.exec(statement)
         farms = result.all()
         return farms
+
+    async def get_roi_breakdown(self, farm_id: uuid.UUID, investment_amount_naira: int, session: AsyncSession):
+        farm = await session.get(Farm, farm_id)
+        if not farm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="farm not found")
+            
+        crop = await session.get(CropReference, farm.crop_reference_id)
+        if not crop:
+             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="crop reference not found")
+        
+        # Calculate Base Revenues (Yield * Size * Price)
+        size = farm.farm_size_ha
+        
+        price_min = crop.market_price_min
+        price_max = crop.market_price_max
+        price_avg = (price_min + price_max) / 2
+
+        yield_min = crop.yield_per_hectare_min
+        yield_max = crop.yield_per_hectare_max
+        yield_avg = (yield_min + yield_max) / 2
+
+        rev_conservative = yield_min * size * price_min
+        rev_expected = yield_avg * size * price_avg
+        rev_optimistic = yield_max * size * price_max
+
+        # Apply 95% investor pool
+        pool_con = rev_conservative * 0.95
+        pool_exp = rev_expected * 0.95
+        pool_opt = rev_optimistic * 0.95
+
+        # Calculate user's stake
+        budget_naira = farm.total_budget / 100
+        target_denominator = budget_naira if budget_naira > 0 else 1
+        stake = investment_amount_naira / target_denominator
+
+        return {
+            "investment_amount": investment_amount_naira,
+            "stake_percentage": round(stake * 100, 2),
+            "projections": {
+                "conservative": {"revenue": int(rev_conservative), "payout": int(pool_con * stake)},
+                "expected": {"revenue": int(rev_expected), "payout": int(pool_exp * stake)},
+                "optimistic": {"revenue": int(rev_optimistic), "payout": int(pool_opt * stake)}
+            }
+        }

@@ -107,3 +107,17 @@ async def get_farm(
         "message": "Farm retrieved successfully",
         "data": farm
     }
+
+@farm_router.get("/{id}/roi-breakdown")
+async def get_roi_breakdown(
+    id: uuid.UUID,
+    investment_amount: int, # query param
+    session: AsyncSession = Depends(get_session),
+    farm_service: FarmServices = Depends(get_farm_services)
+):
+    result = await farm_service.get_roi_breakdown(id, investment_amount, session)
+    return {
+        "success": True, 
+        "message": "ROI projections generated successfully", 
+        "data": result
+    }
