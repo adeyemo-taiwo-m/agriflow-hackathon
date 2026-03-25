@@ -61,6 +61,7 @@ class Farm(SQLModel, table=True):
     )
 
     rejection_reason: Optional[str] = Field(default=None)
+    confirmed_sales_amount: Optional[int] = Field(default=None)
 
     deadline_passed_at: Optional[datetime] = Field(
         default=None,

@@ -36,6 +36,15 @@ POST /api/v1/farms/{id}/uploads (Step 2: Photos & Location -> submits for review
 GET  /api/v1/farms/          (All active farms)
 GET  /api/v1/farms/my-farms  (Farmer's own listings)
 GET  /api/v1/farms/{id}      (Full detail incl. milestones)
+
+# Admin (Phase 2A)
+GET  /api/v1/admin/farms/pending    (List farms awaiting approval)
+POST /api/v1/admin/farms/{id}/approve
+POST /api/v1/admin/farms/{id}/reject
+GET  /api/v1/admin/milestones/pending (List milestones under review)
+POST /api/v1/admin/milestones/{id}/approve
+POST /api/v1/admin/milestones/{id}/reject
+GET  /api/v1/admin/stats            (Global platform statistics)
 ```
 
 ---
@@ -443,9 +452,26 @@ Other tabs:
 
 ### Task 20 — Admin Dashboard Pages
 
-- **Pending Reviews Tab:** Show farmer trust tier on each listing card. "Reject" opens a modal asking for a reason.
-- **Milestone Proofs Tab:** List submitted proofs per farm. "Approve" (releases funds) or "Reject" (shows a callout with rejection reason).
-- **Payouts Tab:** "Initiate All Transfers" block for ready payouts via Interswitch.
+The Admin Dashboard is the nerve center for platform safety and financial integrity. All endpoints are prefixed with `/api/v1/admin` and require an active Admin session.
+
+- **Stats Overview:** Call `GET /api/v1/admin/stats` on mount to populate the top-level metric cards:
+    - Total Farms, Active Farms, Pending Reviews (sum of pending farms and milestones), Total Investors, Total Farmers, Total Funds Raised.
+
+- **Pending Farms Tab:** Call `GET /api/v1/admin/farms/pending`.
+    - Display cards with crop name, farmer name, and **Trust Tier badge**.
+    - "Approve" calls `POST /api/v1/admin/farms/{id}/approve`.
+    - "Reject" calls `POST /api/v1/admin/farms/{id}/reject` (requires `reason` in body, min 10 chars).
+
+- **Milestone Proofs Tab:** Call `GET /api/v1/admin/milestones/pending`.
+    - List milestones with `status: "under_review"`.
+    - Each card must show: `farm_name`, `farmer_name`, `amount`, and the **Proof Photo**.
+    - Display GPS Metadata: `proof_latitude`, `proof_longitude`, `gps_distance_km`, and the `gps_flag` ("pass" | "warning" | "fail").
+    - "Approve" calls `POST /api/v1/admin/milestones/{id}/approve`.
+    - "Reject" calls `POST /api/v1/admin/milestones/{id}/reject` (requires `reason` in body).
+
+- **Payouts Tab:** "Initiate All Transfers" block for ready payouts via Interswitch (Backend logic for this is coming in Phase 3).
+
+**UI Context Note:** Admins see full farmer details during review (BVN/Bank status, account details) which help in verifying the legitimacy of the listing.
 
 ---
 
@@ -482,8 +508,9 @@ This colour system applies everywhere a tier appears: farmer dashboard, farm lis
 | KYC banner & constraints    | ✅ Ready to build |
 | Route protection            | ✅ Ready to build |
 | Farm CRUD                   | ✅ Live (2-Step)  |
+| Admin Dashboard API (2A)    | ✅ Live           |
 | Investments API             | ⏳ Coming soon    |
-| Milestone proof submissions | ⏳ Coming soon    |
+| Milestone proof submissions | ⏳ Ready to build |
 | Payouts API                 | ⏳ Coming soon    |
 
 Your priority is: **Tasks 1–13 first** (API client, auth, KYC). Once those are done the KYC and dashboard experience will be fully functional with real data. Farm creation (Task 14) can run in parallel: text steps can be built with crops data, then wired to the final upload-submission step (`/farms/{id}/uploads`).

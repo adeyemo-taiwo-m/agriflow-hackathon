@@ -35,6 +35,17 @@ class Milestone(SQLModel, table=True):
     status: MilestoneStatus = Field(default=MilestoneStatus.LOCKED)
     rejection_reason: Optional[str] = Field(default=None)
     
+    proof_photo_url: Optional[str] = Field(default=None)
+    proof_latitude: Optional[float] = Field(default=None)
+    proof_longitude: Optional[float] = Field(default=None)
+    gps_distance_km: Optional[float] = Field(default=None)
+    gps_flag: Optional[str] = Field(default=None) # "pass" | "warning" | "fail"
+    
+    submitted_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(pg.TIMESTAMP(timezone=True), nullable=True)
+    )
+
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(pg.TIMESTAMP(timezone=True), nullable=False)
