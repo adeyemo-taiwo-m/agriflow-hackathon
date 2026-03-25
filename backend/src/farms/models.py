@@ -12,11 +12,12 @@ def utc_now():
 
 
 class FarmStatus(str, Enum):
+    DRAFT = "draft"
     PENDING = "pending"
     ACTIVE = "active"
     FUNDED = "funded"
     COMPLETED = "completed"
-    PAID_OUT = "paid out"
+    PAID_OUT = "paid_out"
     REJECTED = "rejected"
     DEADLINE_PASSED = "deadline_passed"
     CANCELLED = "cancelled"
@@ -46,7 +47,7 @@ class Farm(SQLModel, table=True):
     start_date: date
     harvest_date: date
 
-    farm_status: FarmStatus = Field(default=FarmStatus.PENDING)
+    farm_status: FarmStatus = Field(default=FarmStatus.DRAFT)
 
     latitude: Optional[float] = Field(default = None)
     longitude: Optional[float] = Field(default = None)
@@ -104,9 +105,10 @@ class Farm(SQLModel, table=True):
                 width=500,
                 height=500,
                 crop="fill",
-                gravity="face",
-                quality="auto",
-                fetch_format="auto"
+                gravity="auto",
+                quality="auto:best",
+                fetch_format="auto",
+                dpr="auto"
             )
             display_picture_urls.append(url)
              

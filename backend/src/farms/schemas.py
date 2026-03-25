@@ -56,14 +56,13 @@ class FarmOut(BaseModel):
     farm_size_ha: float
     description: str
     total_budget: int
-    funding_goal: int
     amount_raised: int
     expected_yield: float
     sale_price_per_unit: int
     return_rate: float
     start_date: date
     harvest_date: date
-    status: str
+    farm_status: str
     latitude: Optional[float]
     longitude: Optional[float]
     display_photos_public_id: List[str]
@@ -87,14 +86,13 @@ class FarmListOut(BaseModel):
     farm_size_ha: float
     description: str
     total_budget: int
-    funding_goal: int
     amount_raised: int
     expected_yield: float
     sale_price_per_unit: int
     return_rate: float
     start_date: date
     harvest_date: date
-    status: str
+    farm_status: str
     latitude: Optional[float]
     longitude: Optional[float]
     display_photos_public_id: List[str]
