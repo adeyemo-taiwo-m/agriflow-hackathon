@@ -2,16 +2,17 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import api from '../utils/api';
 import { mockAdminStats, mockPendingProofs, mockPayoutFarms, mockAllPayouts } from '../data/mockData';
 import DashboardLayout from '../components/DashboardLayout';
 import CurrencyInput from '../components/CurrencyInput';
 import Pagination from '../components/Pagination';
 
 const baseAdminFarms = [
-  { id:'f1', name:'Oduya Maize Farm', farmer:'Emeka Obi', crop:'Maize', goal:5000000, raised:3800000, status:'active' },
-  { id:'f2', name:'Kano Rice Farm', farmer:'Musa Ibrahim', crop:'Rice', goal:2500000, raised:2500000, status:'funded' },
-  { id:'f3', name:'Oyo Tomato Project', farmer:'Adebayo Ola', crop:'Tomato', goal:1200000, raised:840000, status:'active' },
-  { id:'f4', name:'Benue Yam Farm', farmer:'Terwase Akaa', crop:'Yam', goal:800000, raised:0, status:'draft' },
+  { id:'f1', name:'Oduya Maize Farm', farmer:'Emeka Obi', crop:'Maize', total_budget:5000000, amount_raised:3800000, status:'active' },
+  { id:'f2', name:'Kano Rice Farm', farmer:'Musa Ibrahim', crop:'Rice', total_budget:2500000, amount_raised:2500000, status:'funded' },
+  { id:'f3', name:'Oyo Tomato Project', farmer:'Adebayo Ola', crop:'Tomato', total_budget:1200000, amount_raised:840000, status:'active' },
+  { id:'f4', name:'Benue Yam Farm', farmer:'Terwase Akaa', crop:'Yam', total_budget:800000, amount_raised:0, status:'draft' },
 ];
 const mockAdminFarms = Array.from({length: 45}).map((_, i) => ({
   ...baseAdminFarms[i % baseAdminFarms.length],
@@ -35,12 +36,86 @@ const mockUsersExpanded = Array.from({length: 50}).map((_, i) => ({
 
 const navItems = [
   { key: 'overview', label: 'Overview', icon: 'overview' },
+  { key: 'pending-farms', label: 'Pending Farms', icon: 'explore' },
   { key: 'proofs', label: 'Pending Proofs', icon: 'reviews' },
   { key: 'payouts', label: 'Payouts', icon: 'payments' },
   { key: 'farms', label: 'All Farms', icon: 'farms' },
   { key: 'users', label: 'Users', icon: 'users' },
   { key: 'settings', label: 'Settings', icon: 'settings' },
 ];
+
+function PendingFarmCard({ farm, onAction }) {
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+
+  const handleReject = () => {
+    if (rejectionReason.length < 10) return;
+    onAction(farm.id, 'reject', rejectionReason);
+    setRejecting(false);
+    setRejectionReason('');
+  };
+
+  const tierColor = farm.farmer?.trust_tier === 'verified' ? 'var(--color-primary)' : 
+                    farm.farmer?.trust_tier === 'emerging' ? '#f59e0b' : 'var(--color-text-muted)';
+  
+  const tierLabel = farm.farmer?.trust_tier === 'verified' ? 'Verified Farmer' : 
+                    farm.farmer?.trust_tier === 'emerging' ? 'Emerging Farmer' : 'Unrated';
+
+  return (
+    <div className="card" style={{ padding: '20px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', gap: '16px' }}>
+          <div style={{ width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--color-card-alt)' }}>
+            <img src={farm.listing_display_picture_url?.[0] || '/placeholder-farm.jpg'} alt={farm.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+          <div>
+            <h3 style={{ fontWeight: 600, fontSize: '18px' }}>{farm.name}</h3>
+            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '4px 0' }}>{farm.crop_name} · {farm.state}, {farm.lga}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Farmer: <strong>{farm.farmer?.full_name}</strong></span>
+              <span style={{ 
+                padding: '2px 8px', 
+                borderRadius: '4px', 
+                fontSize: '11px', 
+                fontWeight: 600, 
+                backgroundColor: `${tierColor}15`, 
+                color: tierColor,
+                textTransform: 'uppercase'
+              }}>{tierLabel}</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)' }}>₦{farm.total_budget?.toLocaleString()}</div>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Target Funding</div>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+             <Link to={`/farms/${farm.id}`} className="btn btn-ghost btn-sm">View Details</Link>
+             <button className="btn btn-solid btn-sm" onClick={() => onAction(farm.id, 'approve')}>Approve</button>
+             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => setRejecting(true)}>Reject</button>
+          </div>
+        </div>
+      </div>
+
+      {rejecting && (
+        <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+          <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px', color: 'var(--color-danger)' }}>Reason for Rejection</p>
+          <textarea 
+            className="form-input" 
+            placeholder="Min 10 characters..." 
+            rows={2}
+            value={rejectionReason}
+            onChange={e => setRejectionReason(e.target.value)}
+            style={{ marginBottom: '12px' }}
+          />
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn btn-solid btn-sm" style={{ background: 'var(--color-danger)' }} onClick={handleReject} disabled={rejectionReason.length < 10}>Reject Farm</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setRejecting(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ProofReviewCard({ proof, onAction }) {
   const [expanded, setExpanded] = useState(false);
@@ -58,9 +133,9 @@ function ProofReviewCard({ proof, onAction }) {
     <div className="card review-card">
       <div className="review-header">
         <div>
-          <h3 style={{ fontWeight: 600, fontSize: '16px' }}>{proof.milestoneName}</h3>
+          <h3 style={{ fontWeight: 600, fontSize: '16px' }}>{proof.name}</h3>
           <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-            Farm: {proof.farmName} · Farmer: {proof.farmer}
+            Farm: {proof.farm_name} · Farmer: {proof.farmer_name}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -75,7 +150,7 @@ function ProofReviewCard({ proof, onAction }) {
             <div>
               <h4 className="review-sub">Metadata</h4>
               <div className="review-rows">
-                {[['Upload Date', proof.uploadDate], ['File Type', proof.fileType]].map(([l, v]) => (
+                {[['Upload Date', proof.submitted_at ? new Date(proof.submitted_at).toLocaleDateString() : 'N/A'], ['Milestone Order', `#${proof.order_number}`]].map(([l, v]) => (
                   <div key={l} className="review-row-mini"><span>{l}</span><strong>{v}</strong></div>
                 ))}
               </div>
@@ -83,8 +158,8 @@ function ProofReviewCard({ proof, onAction }) {
             <div>
               <h4 className="review-sub">GPS Verification</h4>
               <div className="review-rows">
-                <div className="review-row-mini"><span>Status</span><strong style={{ color: 'var(--color-primary)' }}>Matches Farm Anchor</strong></div>
-                <div className="review-row-mini"><span>Variance</span><strong>12 meters</strong></div>
+                <div className="review-row-mini"><span>Status</span><strong style={{ color: proof.gps_flag === 'pass' ? 'var(--color-primary)' : 'var(--color-danger)' }}>{proof.gps_flag?.toUpperCase() || 'N/A'}</strong></div>
+                <div className="review-row-mini"><span>Variance</span><strong>{proof.gps_distance_km ? `${proof.gps_distance_km.toFixed(2)} km` : 'N/A'}</strong></div>
               </div>
             </div>
           </div>
@@ -92,7 +167,7 @@ function ProofReviewCard({ proof, onAction }) {
           <div style={{ marginTop: '16px' }}>
             <h4 className="review-sub">Evidence</h4>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <img src={proof.fileUrl} alt="proof" style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--color-border)' }} />
+              <img src={proof.proof_photo_url} alt="proof" style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--color-border)' }} />
             </div>
           </div>
 
@@ -129,17 +204,90 @@ export default function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(searchParams.get('tab') || 'overview');
   
+  const [stats, setStats] = useState(mockAdminStats);
+  const [pendingFarms, setPendingFarms] = useState([]);
+  const [proofs, setProofs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const { addToast } = useToast();
+  const { user, logout, fetchProfile } = useAuth();
+  const navigate = useNavigate();
+
+  const fetchStats = async () => {
+    try {
+      const res = await api.get('/admin/stats');
+      if (res.data.success) setStats(res.data.data);
+    } catch (err) {
+      console.error("Stats fetch failed:", err);
+    }
+  };
+
+  const fetchPendingFarms = async () => {
+    try {
+      const res = await api.get('/admin/farms/pending');
+      if (res.data.success) setPendingFarms(res.data.data);
+    } catch (err) {
+      console.error("Pending farms fetch failed:", err);
+    }
+  };
+
+  const fetchPendingProofs = async () => {
+    try {
+      const res = await api.get('/admin/milestones/pending');
+      if (res.data.success) setProofs(res.data.data);
+    } catch (err) {
+      console.error("Pending proofs fetch failed:", err);
+    }
+  };
+
+  const initData = async () => {
+    setLoading(true);
+    await Promise.all([fetchStats(), fetchPendingFarms(), fetchPendingProofs()]);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const currentTab = searchParams.get('tab') || 'overview';
-    if (tab !== currentTab) setTab(currentTab);
-  }, [searchParams]);
+    initData();
+    fetchProfile();
+  }, []);
+
+  const handleFarmAction = async (id, action, reason) => {
+    try {
+      if (action === 'approve') {
+        await api.post(`/admin/farms/${id}/approve`);
+        addToast("Farm Approved", "success", "The farm is now live and can receive investments.");
+      } else {
+        await api.post(`/admin/farms/${id}/reject`, { reason });
+        addToast("Farm Rejected", "error", "The farmer will be notified of the reason.");
+      }
+      fetchPendingFarms();
+      fetchStats();
+    } catch (err) {
+      addToast("Action Failed", "error", err.response?.data?.detail || "Could not complete the request.");
+    }
+  };
+
+  const handleAction = async (id, action, reason) => {
+    try {
+      if (action === 'approve') {
+        await api.post(`/admin/milestones/${id}/approve`);
+        addToast("Proof Approved", "success", "Milestone funds verified successfully.");
+      } else {
+        await api.post(`/admin/milestones/${id}/reject`, { reason });
+        addToast("Proof Rejected", "error", "Farmer notified to resubmit.");
+      }
+      fetchPendingProofs();
+      fetchStats();
+    } catch (err) {
+      addToast("Action Failed", "error", err.response?.data?.detail || "Could not complete the request.");
+    }
+  };
 
   const handleTabChange = (k) => {
     setTab(k);
     setSearchParams({ tab: k });
   };
 
-  const [proofs, setProofs] = useState(mockPendingProofs);
   const [searchUsers, setSearchUsers] = useState('');
   
   // Payout states
@@ -153,25 +301,6 @@ export default function AdminDashboard() {
   const [payoutsPage, setPayoutsPage] = useState(1);
   const [farmsPage, setFarmsPage] = useState(1);
   const [usersPage, setUsersPage] = useState(1);
-
-  const { user, logout, fetchProfile } = useAuth();
-  
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  const { addToast } = useToast();
-  const navigate = useNavigate();
-
-  const stats = mockAdminStats;
-
-  const handleAction = (id, action, reason) => {
-    setProofs(r => r.filter(rv => rv.id !== id));
-    if (action === 'approve') addToast('Proof approved!', 'success', 'Milestone funds will be verified.');
-    if (action === 'reject') addToast('Proof rejected.', 'error', reason ? `Reason: ${reason}` : 'Farmer will be notified to resubmit.');
-  };
-
-  
 
   const handleBatchPayout = () => {
     setPayoutsList(prev => prev.map(p => (p.farmId === selectedPayoutFarm && p.status === 'waiting') ? { ...p, status: 'successful' } : p));
@@ -227,12 +356,12 @@ export default function AdminDashboard() {
             {/* Metric cards */}
             <div className="metric-cards" style={{ marginBottom: '32px' }}>
               {[
-                { label: 'Total Farms', val: stats.totalFarms },
-                { label: 'Active Listings', val: stats.activeFarms },
-                { label: 'Pending Reviews', val: proofs.length, accent: true },
-                { label: 'Total Investors', val: stats.totalInvestors },
-                { label: 'Total Farmers', val: stats.totalFarmers },
-                { label: 'Funds Raised', val: `₦${(stats.totalFundsRaised / 1000000).toFixed(1)}M`, green: true },
+                { label: 'Total Farms', val: stats.total_farms || 0 },
+                { label: 'Active Listings', val: stats.active_farms || 0 },
+                { label: 'Pending Reviews', val: stats.pending_reviews || 0, accent: true },
+                { label: 'Total Investors', val: stats.total_investors || 0 },
+                { label: 'Total Farmers', val: stats.total_farmers || 0 },
+                { label: 'Funds Raised', val: `₦${((stats.total_funds_raised || 0) / 1000000).toFixed(1)}M`, green: true },
               ].map(m => (
                 <div key={m.label} className="metric-card">
                   <div className="metric-card-label">{m.label}</div>
@@ -243,7 +372,7 @@ export default function AdminDashboard() {
 
             {/* Pending proofs preview */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Pending Proofs <span className="badge badge-pending" style={{ marginLeft: '8px' }}>{stats.pendingProofs}</span></h2>
+              <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Pending Proofs <span className="badge badge-pending" style={{ marginLeft: '8px' }}>{proofs.length}</span></h2>
               <button className="btn-link" onClick={() => handleTabChange('proofs')}>View all →</button>
             </div>
             {proofs.length === 0 ? (
@@ -282,6 +411,24 @@ export default function AdminDashboard() {
           </>
         )}
 
+        {tab === 'pending-farms' && (
+          <>
+            <h1 style={{ fontSize: '26px', fontWeight: 700, marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>Pending Farm Reviews</h1>
+            {pendingFarms.length === 0 ? (
+              <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+                <div style={{ fontSize: '40px', marginBottom: '12px' }}>🌿</div>
+                <p>No farms currently awaiting review.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {pendingFarms.map(f => (
+                  <PendingFarmCard key={f.id} farm={f} onAction={handleFarmAction} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {tab === 'proofs' && (
           <>
             <h1 style={{ fontSize: '26px', fontWeight: 700, marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>Milestone Verification</h1>
@@ -289,7 +436,7 @@ export default function AdminDashboard() {
               <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-secondary)' }}><div style={{ fontSize: '40px', marginBottom: '12px' }}>🎉</div><p>All milestone proofs have been verified!</p></div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {paginatedProofs.map(r => <ProofReviewCard key={r.id} proof={r} onAction={handleAction} />)}
+                {proofs.map(r => <ProofReviewCard key={r.id} proof={r} onAction={handleAction} />)}
                 <Pagination currentPage={proofsPage} totalPages={Math.ceil(proofs.length / ITEMS_PER_PAGE)} onPageChange={setProofsPage} />
               </div>
             )}
@@ -326,19 +473,19 @@ export default function AdminDashboard() {
                 <div className="metric-cards" style={{ marginBottom: '32px' }}>
                   <div className="metric-card">
                     <div className="metric-card-label">Total Proceeds</div>
-                    <div className="metric-card-value">₦{farm.totalProceeds.toLocaleString()}</div>
+                    <div className="metric-card-value">₦{farm.total_proceeds.toLocaleString()}</div>
                   </div>
                   <div className="metric-card">
                     <div className="metric-card-label">Investor Pool</div>
-                    <div className="metric-card-value green">₦{farm.investorPool.toLocaleString()}</div>
+                    <div className="metric-card-value green">₦{farm.investor_pool.toLocaleString()}</div>
                   </div>
                   <div className="metric-card">
                     <div className="metric-card-label">Farmer Payout</div>
-                    <div className="metric-card-value">₦{farm.farmerPayout.toLocaleString()}</div>
+                    <div className="metric-card-value">₦{farm.farmer_payout.toLocaleString()}</div>
                   </div>
                   <div className="metric-card">
                     <div className="metric-card-label">Platform Fee</div>
-                    <div className="metric-card-value">₦{farm.platformFee.toLocaleString()}</div>
+                    <div className="metric-card-value">₦{farm.platform_fee.toLocaleString()}</div>
                   </div>
                 </div>
               );
@@ -471,8 +618,8 @@ export default function AdminDashboard() {
                       <td style={{ fontWeight: 500 }}>{f.name}</td>
                       <td>{f.farmer}</td>
                       <td><span className="badge badge-active">{f.crop}</span></td>
-                      <td className="text-mono">₦{(f.goal/1000).toFixed(0)}k</td>
-                      <td className="text-mono">₦{(f.raised/1000).toFixed(0)}k</td>
+                      <td className="text-mono">₦{(f.total_budget/1000).toFixed(0)}k</td>
+                      <td className="text-mono">₦{(f.amount_raised/1000).toFixed(0)}k</td>
                       <td><span className={`badge badge-${f.status === 'active' ? 'active' : f.status === 'funded' ? 'pending' : 'draft'}`} style={{ textTransform: 'capitalize' }}>{f.status}</span></td>
                       <td><Link to={`/farms/${f.id}`} className="btn-link">View</Link></td>
                     </tr>

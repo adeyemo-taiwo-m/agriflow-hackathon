@@ -16,16 +16,16 @@ class AdminServices:
         """Retrieves all farms awaiting approval, sorted by oldest first."""
         statement = select(Farm).where(Farm.farm_status == FarmStatus.PENDING).order_by(Farm.created_at.asc()).options(
             selectinload(Farm.owner),
-            selectinload(Farm.milestones)
+            selectinload(Farm.milestones).selectinload(Milestone.proofs)
         )
         result = await session.exec(statement)
         farms = result.all()
         return [
             {
-                **farm.model_dump(),
+                **farm.model_dump(include_computed=True),
                 "status": farm.farm_status,
-                "farmer": farm.owner,
-                "milestones": farm.milestones
+                "farmer": farm.owner.model_dump(include_computed=True) if farm.owner else None,
+                "milestones": [m.model_dump(include_computed=True) for m in farm.milestones]
             } for farm in farms
         ]
 
@@ -46,16 +46,15 @@ class AdminServices:
         # Re-fetch with relationships
         statement = select(Farm).where(Farm.id == farm.id).options(
             selectinload(Farm.owner),
-            selectinload(Farm.milestones)
+            selectinload(Farm.milestones).selectinload(Milestone.proofs)
         )
         result = await session.exec(statement)
         farm = result.one()
-
         return {
-            **farm.model_dump(),
+            **farm.model_dump(include_computed=True),
             "status": farm.farm_status,
-            "farmer": farm.owner,
-            "milestones": farm.milestones
+            "farmer": farm.owner.model_dump(include_computed=True),
+            "milestones": [m.model_dump(include_computed=True) for m in farm.milestones]
         }
 
     async def reject_farm(self, farm_id: uuid.UUID, reason: str, session: AsyncSession) -> dict:
@@ -73,30 +72,30 @@ class AdminServices:
         # Re-fetch with relationships
         statement = select(Farm).where(Farm.id == farm.id).options(
             selectinload(Farm.owner),
-            selectinload(Farm.milestones)
+            selectinload(Farm.milestones).selectinload(Milestone.proofs)
         )
         result = await session.exec(statement)
         farm = result.one()
-
         return {
-            **farm.model_dump(),
+            **farm.model_dump(include_computed=True),
             "status": farm.farm_status,
-            "farmer": farm.owner,
-            "milestones": farm.milestones
+            "farmer": farm.owner.model_dump(include_computed=True),
+            "milestones": [m.model_dump(include_computed=True) for m in farm.milestones]
         }
 
     async def get_pending_milestones(self, session: AsyncSession) -> List[dict]:
         """Retrieves all milestones under review."""
         statement = select(Milestone).where(Milestone.status == MilestoneStatus.UNDER_REVIEW).options(
-            selectinload(Milestone.farm).selectinload(Farm.owner)
+            selectinload(Milestone.farm).selectinload(Farm.owner),
+            selectinload(Milestone.proofs)
         )
         result = await session.exec(statement)
         milestones = result.all()
         return [
             {
-                **m.model_dump(),
-                "farm_name": m.farm.name,
-                "farmer_name": m.farm.owner.full_name
+                **m.model_dump(include_computed=True),
+                "farm_name": m.farm.name if m.farm else "Unknown Farm",
+                "farmer_name": m.farm.owner.full_name if m.farm and m.farm.owner else "Unknown Farmer"
             } for m in milestones
         ]
 
@@ -139,13 +138,13 @@ class AdminServices:
         
         # Re-fetch with relationships
         statement = select(Milestone).where(Milestone.id == milestone.id).options(
-            selectinload(Milestone.farm).selectinload(Farm.owner)
+            selectinload(Milestone.farm).selectinload(Farm.owner),
+            selectinload(Milestone.proofs)
         )
         result = await session.exec(statement)
         milestone = result.one()
-
         return {
-            **milestone.model_dump(),
+            **milestone.model_dump(include_computed=True),
             "farm_name": milestone.farm.name,
             "farmer_name": milestone.farm.owner.full_name
         }
@@ -164,13 +163,13 @@ class AdminServices:
         
         # Re-fetch with relationships
         statement = select(Milestone).where(Milestone.id == milestone.id).options(
-            selectinload(Milestone.farm).selectinload(Farm.owner)
+            selectinload(Milestone.farm).selectinload(Farm.owner),
+            selectinload(Milestone.proofs)
         )
         result = await session.exec(statement)
         milestone = result.one()
-
         return {
-            **milestone.model_dump(),
+            **milestone.model_dump(include_computed=True),
             "farm_name": milestone.farm.name,
             "farmer_name": milestone.farm.owner.full_name
         }
@@ -188,7 +187,7 @@ class AdminServices:
         total_investors = await session.exec(select(func.count(User.uid)).where(User.role == Role.INVESTOR))
         total_farmers = await session.exec(select(func.count(User.uid)).where(User.role == Role.FARMER))
         # Total funds raised
-        total_funds_raised = await session.exec(select(func.sum(Farm.amount_raised)))
+        total_funds_raised_kobo = await session.exec(select(func.sum(Farm.amount_raised_kobo)))
 
         return {
             "total_farms": total_farms.one() or 0,
@@ -196,7 +195,7 @@ class AdminServices:
             "pending_reviews": (pending_farms.one() or 0) + (under_review_milestones.one() or 0),
             "total_investors": total_investors.one() or 0,
             "total_farmers": total_farmers.one() or 0,
-            "total_funds_raised": total_funds_raised.one() or 0
+            "total_funds_raised": (total_funds_raised_kobo.one() or 0) / 100
         }
 
 from src.harvest.models import HarvestReport, HarvestReportStatus
@@ -207,7 +206,7 @@ from datetime import datetime
 
 class AdminFinancialServices:
     
-    async def confirm_sales(self, farm_id: uuid.UUID, confirmed_amount_naira: int, session: AsyncSession):
+    async def confirm_sales(self, farm_id: uuid.UUID, confirmed_amount_naira: float, session: AsyncSession):
         # 1. Fetch dependencies
         farm = await session.get(Farm, farm_id)
         report_query = await session.exec(select(HarvestReport).where(HarvestReport.farm_id == farm_id))
@@ -220,18 +219,20 @@ class AdminFinancialServices:
              raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="harvest report not found")
 
         # 2. Update Report
-        report.admin_confirmed_sales = confirmed_amount_naira
+        confirmed_amount_kobo = int(confirmed_amount_naira * 100)
+        report.admin_confirmed_sales_kobo = confirmed_amount_kobo
         report.status = HarvestReportStatus.VERIFIED
         report.verified_at = datetime.utcnow()
         session.add(report)
 
-        # 3. THE REVENUE SPLIT MATH (Everything calculated in Naira here)
-        platform_fee = int(confirmed_amount_naira * 0.05)
-        investor_pool = int(confirmed_amount_naira * 0.95)
+        # 3. THE REVENUE SPLIT MATH (Everything calculated in Kobo)
+        # Platform fee (5%)
+        platform_fee_kobo = int(confirmed_amount_kobo * 0.05)
+        investor_pool_kobo = int(confirmed_amount_kobo * 0.95)
         
-        farm_raised_naira = farm.amount_raised / 100 # amount_raised is in kobo!
+        farm_raised_kobo = farm.amount_raised_kobo
 
-        if farm_raised_naira == 0:
+        if farm_raised_kobo == 0:
              raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="cannot confirm sales for farm with no investment")
 
         # 4. Generate Investor Payouts
@@ -243,38 +244,36 @@ class AdminFinancialServices:
         )
         investments = investments_query.all()
 
-        total_investor_payouts = 0
+        total_investor_payouts_kobo = 0
 
         for inv in investments:
-            inv_amount_naira = inv.amount_kobo / 100
-            
             # Investor Payout = Pool * (Investment / Total Raised)
-            investor_total_share = int(investor_pool * (inv_amount_naira / farm_raised_naira))
-            investor_profit = int(investor_total_share - inv_amount_naira)
+            investor_total_share_kobo = int(investor_pool_kobo * (inv.amount_kobo / farm_raised_kobo))
+            investor_profit_kobo = investor_total_share_kobo - inv.amount_kobo
             
             payout = Payout(
                 farm_id=farm.id,
                 recipient_id=inv.investor_id,
                 recipient_type=RecipientType.INVESTOR,
                 investment_id=inv.id,
-                principal_naira=int(inv_amount_naira),
-                profit_naira=investor_profit,
-                total_amount_naira=investor_total_share
+                principal_kobo=inv.amount_kobo,
+                profit_kobo=investor_profit_kobo,
+                total_amount_kobo=investor_total_share_kobo
             )
             session.add(payout)
-            total_investor_payouts += investor_total_share
+            total_investor_payouts_kobo += investor_total_share_kobo
 
         # 5. Generate Farmer Payout
-        farmer_payout_amount = confirmed_amount_naira - total_investor_payouts - platform_fee
+        farmer_payout_amount_kobo = confirmed_amount_kobo - total_investor_payouts_kobo - platform_fee_kobo
         
-        if farmer_payout_amount > 0:
+        if farmer_payout_amount_kobo > 0:
             farmer_payout = Payout(
                 farm_id=farm.id,
                 recipient_id=farm.farmer_id,
                 recipient_type=RecipientType.FARMER,
-                principal_naira=0,
-                profit_naira=farmer_payout_amount,
-                total_amount_naira=farmer_payout_amount
+                principal_kobo=0,
+                profit_kobo=farmer_payout_amount_kobo,
+                total_amount_kobo=farmer_payout_amount_kobo
             )
             session.add(farmer_payout)
 

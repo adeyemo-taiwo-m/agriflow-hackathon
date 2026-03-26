@@ -37,12 +37,12 @@ class HarvestServices:
         # 3. Upload File
         upload_result = await self.file_svc.upload_image(evidence, farm.id, ImageCategory.PAYMENT_PHOTO)
 
-        # 4. Save Report
+        # 4. Save Report (Store in Kobo)
         report = HarvestReport(
             farm_id=farm.id,
             farmer_id=farmer.uid,
             actual_yield=actual_yield,
-            total_sales_declared=total_sales,
+            total_sales_declared_kobo=int(total_sales * 100),
             harvest_date=harvest_date,
             buyer_name=buyer_name,
             payment_evidence_public_id=upload_result["public_id"]

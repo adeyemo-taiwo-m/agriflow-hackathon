@@ -5,7 +5,7 @@ from typing import List
 
 class InvestmentInitiateInput(BaseModel):
     farm_id: uuid.UUID
-    amount: int = Field(ge=5000)  # Naira, NOT kobo — minimum ₦5,000
+    amount: float = Field(ge=5000)  # Naira, NOT kobo — minimum ₦5,000
 
 class InvestmentVerifyInput(BaseModel):
     txn_ref: str
@@ -22,6 +22,6 @@ class InvestmentOut(BaseModel):
     id: uuid.UUID
     farm_id: uuid.UUID
     farm_name: str
-    amount: int        # Naira — divide kobo by 100 before returning
+    amount: float        # Naira — computed from kobo
     status: str
     created_at: datetime

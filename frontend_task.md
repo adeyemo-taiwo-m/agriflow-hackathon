@@ -6,6 +6,13 @@ AgriFlow is a farm investment platform that connects verified farmers to investo
 
 ## What is live on the backend right now
 
+> [!IMPORTANT]
+> **Monetary Normalization (Kobo):**
+> All monetary values (budgets, prices, amounts) are stored as **Kobo (integers)** in the database to prevent floating-point errors.
+> - **Inputs:** When sending money values to the API (e.g., `total_budget`, `amount`), send them as **Naira** (integers or floats). The backend will handle the `* 100` conversion.
+> - **Outputs:** The API will return monetary values as **Naira** (divided by 100) in the standard `FarmOut`, `CropReferenceOut`, etc., for UI convenience.
+> - **Internal IDs:** Database fields are named with `_kobo` suffix (e.g., `total_budget_kobo`), but the JSON response keys will generally remain clean (e.g., `total_budget`).
+
 ```http
 # Auth
 POST /api/v1/auth/signup

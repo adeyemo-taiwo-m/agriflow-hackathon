@@ -51,7 +51,7 @@ export default function KYCModal({ isOpen, onClose, role }) {
       if (role === 'farmer') {
         setView('bvn_score');
       } else {
-        addToast("BVN Verified ✅", "success");
+        addToast("BVN Verified", "success");
         setView('bank_input');
       }
     } catch (err) {
@@ -99,8 +99,8 @@ export default function KYCModal({ isOpen, onClose, role }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={
       view === 'bvn_input' ? "Verify identity via BVN" :
-      view === 'bvn_score' ? "BVN Verified ✅" :
-      view === 'bank_input' ? "Add Payout Mode (Bank Account)" : "Verification Complete 🎉"
+      view === 'bvn_score' ? "BVN Verified" :
+      view === 'bank_input' ? "Add Payout Mode (Bank Account)" : "Verification Complete"
     } width={480}>
 
       {/* STEP 1: BVN Input */}
@@ -183,7 +183,11 @@ export default function KYCModal({ isOpen, onClose, role }) {
       {view === 'complete' && (
         <div style={{ textAlign: 'center' }}>
           <div style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.01) 100%)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
-            <span style={{ fontSize: '32px' }}>✅</span>
+            <div style={{ width: '64px', height: '64px', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#10b981' }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
             <h4 style={{ color: 'var(--color-text-primary)', fontWeight: 600, margin: '12px 0 4px' }}>Bank Account Added</h4>
             <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>We confirmed this account belongs to:</p>
             <p style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-primary)', margin: '4px 0 16px' }}>{finalScoreData?.account_name}</p>

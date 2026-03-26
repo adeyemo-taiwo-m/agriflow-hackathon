@@ -70,13 +70,13 @@ export default function InvestorDashboard() {
     pbStart + ITEMS_PER_PAGE,
   );
 
-  const totalInvested = displayPortfolio.reduce((s, i) => s + i.invested, 0);
+  const totalInvested = displayPortfolio.reduce((s, i) => s + i.amount, 0);
   const totalExpectedPayout = displayPortfolio.reduce(
-    (s, i) => s + (i.expectedReturn || 0),
+    (s, i) => s + (i.expected_return || 0),
     0,
   );
   const totalExpectedProfit = displayPortfolio.reduce(
-    (s, i) => s + ((i.expectedReturn || 0) - (i.invested || 0)),
+    (s, i) => s + ((i.expected_return || 0) - (i.amount || 0)),
     0,
   );
   const receivedToDate = displayAllPayouts
@@ -85,17 +85,17 @@ export default function InvestorDashboard() {
       const profit =
         typeof p.profit === "number"
           ? p.profit
-          : p.payoutAmount != null && p.amountInvested != null
-            ? p.payoutAmount <= p.amountInvested
-              ? p.payoutAmount
-              : p.payoutAmount - p.amountInvested
-            : p.payoutAmount || 0;
+          : p.payout_amount != null && p.amount_invested != null
+            ? p.payout_amount <= p.amount_invested
+              ? p.payout_amount
+              : p.payout_amount - p.amount_invested
+            : p.payout_amount || 0;
       const total =
         typeof p.totalToSend === "number"
           ? p.totalToSend
-          : p.amountInvested != null
-            ? (p.amountInvested || 0) + profit
-            : p.payoutAmount || 0;
+          : p.amount_invested != null
+            ? (p.amount_invested || 0) + profit
+            : p.payout_amount || 0;
       return s + (total || 0);
     }, 0);
   const activeFarms = displayPortfolio.filter(
@@ -181,7 +181,7 @@ export default function InvestorDashboard() {
                   alignItems: 'center',
                   gap: '4px'
                 }}>
-                  {user?.bvn_verified ? '✅ BVN Verified' : '⭕ Verify BVN'}
+                  {user?.bvn_verified ? '✓ BVN Verified' : 'Verify BVN'}
                 </span>
                 <span style={{ color: 'var(--color-text-muted)' }}>→</span>
                 <span style={{ 
@@ -191,7 +191,7 @@ export default function InvestorDashboard() {
                   alignItems: 'center',
                   gap: '4px'
                 }}>
-                  {user?.bank_verified ? '✅ Bank Account Added' : 'Add Bank Account'}
+                  {user?.bank_verified ? '✓ Bank Account Added' : 'Add Bank Account'}
                 </span>
               </div>
             </div>
@@ -350,7 +350,7 @@ export default function InvestorDashboard() {
                       className="text-mono"
                       style={{ fontSize: "20px", fontWeight: 700 }}
                     >
-                      ₦{inv.invested.toLocaleString()}
+                      ₦{inv.amount.toLocaleString()}
                     </div>
                   </div>
                   <div>
@@ -371,7 +371,7 @@ export default function InvestorDashboard() {
                         color: "var(--color-primary)",
                       }}
                     >
-                      ₦{inv.expectedReturn.toLocaleString()}
+                      ₦{inv.expected_return.toLocaleString()}
                     </div>
                   </div>
                   <div>
@@ -394,7 +394,7 @@ export default function InvestorDashboard() {
                     >
                       +
                       {(
-                        ((inv.expectedReturn - inv.invested) / inv.invested) *
+                        ((inv.expected_return - inv.amount) / inv.amount) *
                         100
                       ).toFixed(1)}
                       %
@@ -537,7 +537,8 @@ export default function InvestorDashboard() {
               <div>
                 <strong>Add your payout details</strong>
                 <p style={{ fontSize: "14px", margin: "4px 0 0 0" }}>
-                  to receive returns when your farms complete.{" "}
+                  Where should we send your returns when your farms complete?
+                  Account name must match your BVN in production.{" "}
                   <button
                     className="btn-link"
                     onClick={() => handleTabChange("settings")}
@@ -702,8 +703,8 @@ export default function InvestorDashboard() {
                           style={{ color: "var(--color-accent)" }}
                         >
                           {(
-                            (((ep.expected || 0) - (ep.investedAmount || 0)) /
-                              (ep.investedAmount || 1)) *
+                            (((ep.expected_payout || 0) - (ep.invested_amount || 0)) /
+                              (ep.invested_amount || 1)) *
                             100
                           ).toFixed(1)}
                           %
@@ -816,7 +817,7 @@ export default function InvestorDashboard() {
                         {ep.statusStep === 4 &&
                           "Proceeds processing — transfer initiated to your account"}
                         {ep.statusStep === 5 &&
-                          `Paid on 14 Mar 2026 — ${ep.expected} to GTBank ···6789`}
+                          `Paid on 14 Mar 2026 — ₦${(ep.expected * ep.invested_amount + ep.invested_amount).toLocaleString()} to GTBank ···6789`}
                         {ep.dateStatus === "overdue" && (
                           <span
                             style={{
@@ -890,7 +891,7 @@ export default function InvestorDashboard() {
                         <span className="badge badge-active">{ep.crop}</span>
                       </td>
                       <td className="text-mono">
-                        ₦{ep.investedAmount.toLocaleString()}
+                        ₦{ep.invested_amount.toLocaleString()}
                       </td>
                       <td
                         className="text-mono"
@@ -899,10 +900,10 @@ export default function InvestorDashboard() {
                           fontWeight: 600,
                         }}
                       >
-                        {ep.expected}
+                        ₦{(ep.expected * ep.invested_amount + ep.invested_amount).toLocaleString()}
                       </td>
                       <td style={{ textTransform: "capitalize" }}>
-                        {ep.returnType}
+                        {ep.return_type}
                       </td>
                       <td
                         style={{
@@ -1159,7 +1160,7 @@ function InvestmentsView({ investments, mode }) {
                   </span>
                   <div>
                     <strong className="text-mono">
-                      ₦{inv.invested.toLocaleString()}
+                      ₦{inv.amount.toLocaleString()}
                     </strong>
                   </div>
                 </div>
@@ -1174,7 +1175,7 @@ function InvestmentsView({ investments, mode }) {
                     >
                       ₦
                       {(
-                        (inv.expectedReturn || 0) - (inv.invested || 0)
+                        (inv.expected_return || 0) - (inv.amount || 0)
                       ).toLocaleString()}
                     </strong>
                   </div>
@@ -1185,7 +1186,7 @@ function InvestmentsView({ investments, mode }) {
                   </span>
                   <div>
                     <strong className="text-mono">
-                      ₦{(inv.expectedReturn || 0).toLocaleString()}
+                      ₦{(inv.expected_return || 0).toLocaleString()}
                     </strong>
                   </div>
                 </div>
@@ -1199,8 +1200,8 @@ function InvestmentsView({ investments, mode }) {
                       style={{ color: "var(--color-accent)" }}
                     >
                       {(
-                        (((inv.expectedReturn || 0) - (inv.invested || 0)) /
-                          inv.invested) *
+                        (((inv.expected_return || 0) - (inv.amount || 0)) /
+                          inv.amount) *
                         100
                       ).toFixed(1)}
                       %
@@ -1264,7 +1265,7 @@ function InvestmentsView({ investments, mode }) {
               <td>
                 <span className="badge badge-active">{inv.crop}</span>
               </td>
-              <td className="text-mono">₦{inv.invested.toLocaleString()}</td>
+              <td className="text-mono">₦{inv.amount.toLocaleString()}</td>
               <td style={{ textTransform: "capitalize" }}>
                 {inv.dividendType}
               </td>
@@ -1294,7 +1295,7 @@ function InvestmentsView({ investments, mode }) {
                 className="text-mono"
                 style={{ color: "var(--color-primary)" }}
               >
-                ₦{inv.expectedReturn.toLocaleString()}
+                ₦{inv.expected_return.toLocaleString()}
               </td>
               <td>
                 <Link to={`/farms/${inv.farmId}`} className="btn-link">

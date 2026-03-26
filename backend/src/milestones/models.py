@@ -32,7 +32,12 @@ class Milestone(SQLModel, table=True):
     description: Optional[str] = Field(default=None)
     order_number: int # 1, 2, 3, 4
     expected_week: int
-    amount: int # in naira
+    amount_kobo: int
+    
+    @computed_field
+    @property
+    def amount(self) -> float:
+        return self.amount_kobo / 100
     
     status: MilestoneStatus = Field(default=MilestoneStatus.LOCKED)
     rejection_reason: Optional[str] = Field(default=None)

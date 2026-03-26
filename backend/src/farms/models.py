@@ -37,12 +37,27 @@ class Farm(SQLModel, table=True):
     farm_size_ha: float
     description: str
 
-    total_budget: int
-    amount_raised: int = Field(default=0)
+    total_budget_kobo: int
+    amount_raised_kobo: int = Field(default=0)
 
     expected_yield: float
-    sale_price_per_unit: int
+    sale_price_per_unit_kobo: int
     return_rate: float
+
+    @computed_field
+    @property
+    def total_budget(self) -> float:
+        return self.total_budget_kobo / 100
+
+    @computed_field
+    @property
+    def amount_raised(self) -> float:
+        return self.amount_raised_kobo / 100
+
+    @computed_field
+    @property
+    def sale_price_per_unit(self) -> float:
+        return self.sale_price_per_unit_kobo / 100
 
     start_date: date
     harvest_date: date
@@ -62,7 +77,12 @@ class Farm(SQLModel, table=True):
     )
 
     rejection_reason: Optional[str] = Field(default=None)
-    confirmed_sales_amount: Optional[int] = Field(default=None)
+    confirmed_sales_amount_kobo: Optional[int] = Field(default=None)
+
+    @computed_field
+    @property
+    def confirmed_sales_amount(self) -> Optional[float]:
+        return self.confirmed_sales_amount_kobo / 100 if self.confirmed_sales_amount_kobo is not None else None
 
     deadline_passed_at: Optional[datetime] = Field(
         default=None,

@@ -52,8 +52,11 @@ class FarmServices:
             )
 
         
-        max_budget = crop.cost_per_hectare_max * user_input.farm_size_ha * (1 + crop.max_budget_deviation)
-        if user_input.total_budget > max_budget:
+        # Budget validation (crop reference stores kobo)
+        max_budget_kobo = crop.cost_per_hectare_max_kobo * user_input.farm_size_ha * (1 + crop.max_budget_deviation)
+        user_budget_kobo = int(user_input.total_budget * 100)
+        
+        if user_budget_kobo > max_budget_kobo:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Budget exceeds maximum allowed for this crop and farm size"
@@ -94,8 +97,18 @@ class FarmServices:
 
         farm_data = user_input.model_dump()
         farm_data.pop("crop_reference_id", None)
+        
+        # Convert Naira inputs to Kobo for storage
+        total_budget_kobo = int(user_input.total_budget * 100)
+        sale_price_kobo = int(user_input.sale_price_per_unit * 100)
+        
+        farm_data.pop("total_budget", None)
+        farm_data.pop("sale_price_per_unit", None)
+        
         new_farm = Farm(
             **farm_data,
+            total_budget_kobo=total_budget_kobo,
+            sale_price_per_unit_kobo=sale_price_kobo,
             farmer_id=farmer.uid,
             crop_reference_id=crop.id,
             crop_name=crop.name,
@@ -157,13 +170,13 @@ class FarmServices:
             
             milestones = []
             for index, template in enumerate(crop.default_milestones):
-                amount = int(template["percentage"] * farm.total_budget)
+                amount_kobo = int(template["percentage"] * farm.total_budget_kobo)
                 milestone = Milestone(
                     farm_id=farm.id,
                     name=template["name"],
                     order_number=index + 1,
                     expected_week=template["week"],
-                    amount=amount,
+                    amount_kobo=amount_kobo,
                     status=MilestoneStatus.LOCKED
                 )
                 milestones.append(milestone)
@@ -187,7 +200,7 @@ class FarmServices:
         
         
         statement = select(Farm).where(Farm.id == farm_id).options(
-            selectinload(Farm.milestones),
+            selectinload(Farm.milestones).selectinload(Milestone.proofs),
             selectinload(Farm.owner)
         )
         result = await session.exec(statement)
@@ -226,7 +239,7 @@ class FarmServices:
         farms = result.all()
         return farms
 
-    async def get_roi_breakdown(self, farm_id: uuid.UUID, investment_amount_naira: int, session: AsyncSession):
+    async def get_roi_breakdown(self, farm_id: uuid.UUID, investment_amount_naira: float, session: AsyncSession):
         farm = await session.get(Farm, farm_id)
         if not farm:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="farm not found")
@@ -235,37 +248,38 @@ class FarmServices:
         if not crop:
              raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="crop reference not found")
         
-        # Calculate Base Revenues (Yield * Size * Price)
+        # Calculate Base Revenues in Kobo (Yield * Size * Price_Kobo)
         size = farm.farm_size_ha
         
-        price_min = crop.market_price_min
-        price_max = crop.market_price_max
-        price_avg = (price_min + price_max) / 2
+        price_min_kobo = crop.market_price_min_kobo
+        price_max_kobo = crop.market_price_max_kobo
+        price_avg_kobo = (price_min_kobo + price_max_kobo) / 2
 
         yield_min = crop.yield_per_hectare_min
         yield_max = crop.yield_per_hectare_max
         yield_avg = (yield_min + yield_max) / 2
 
-        rev_conservative = yield_min * size * price_min
-        rev_expected = yield_avg * size * price_avg
-        rev_optimistic = yield_max * size * price_max
+        rev_con_kobo = yield_min * size * price_min_kobo
+        rev_exp_kobo = yield_avg * size * price_avg_kobo
+        rev_opt_kobo = yield_max * size * price_max_kobo
 
         # Apply 95% investor pool
-        pool_con = rev_conservative * 0.95
-        pool_exp = rev_expected * 0.95
-        pool_opt = rev_optimistic * 0.95
+        pool_con_kobo = rev_con_kobo * 0.95
+        pool_exp_kobo = rev_exp_kobo * 0.95
+        pool_opt_kobo = rev_opt_kobo * 0.95
 
         # Calculate user's stake
-        budget_naira = farm.total_budget / 100
-        target_denominator = budget_naira if budget_naira > 0 else 1
-        stake = investment_amount_naira / target_denominator
+        inv_amount_kobo = investment_amount_naira * 100
+        budget_kobo = farm.total_budget_kobo
+        target_denominator = budget_kobo if budget_kobo > 0 else 1
+        stake = inv_amount_kobo / target_denominator
 
         return {
             "investment_amount": investment_amount_naira,
             "stake_percentage": round(stake * 100, 2),
             "projections": {
-                "conservative": {"revenue": int(rev_conservative), "payout": int(pool_con * stake)},
-                "expected": {"revenue": int(rev_expected), "payout": int(pool_exp * stake)},
-                "optimistic": {"revenue": int(rev_optimistic), "payout": int(pool_opt * stake)}
+                "conservative": {"revenue": int(rev_con_kobo / 100), "payout": int(pool_con_kobo * stake / 100)},
+                "expected": {"revenue": int(rev_exp_kobo / 100), "payout": int(pool_exp_kobo * stake / 100)},
+                "optimistic": {"revenue": int(rev_opt_kobo / 100), "payout": int(pool_opt_kobo * stake / 100)}
             }
         }

@@ -34,12 +34,12 @@ class InvestmentServices:
 
         # Step 3 — Overfunding check
         amount_kobo = user_input.amount * 100
-        remaining = farm.total_budget - farm.amount_raised
+        remaining_kobo = farm.total_budget_kobo - farm.amount_raised_kobo
 
-        if amount_kobo > remaining:
+        if amount_kobo > remaining_kobo:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Investment exceeds remaining budget. Maximum: ₦{remaining / 100:,.0f}"
+                detail=f"Investment exceeds remaining budget. Maximum: ₦{remaining_kobo / 100:,.0f}"
             )
 
         # Step 4 — Generate txn_ref
@@ -109,9 +109,9 @@ class InvestmentServices:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
         # Step 5 — Race condition check
-        remaining = farm.total_budget - farm.amount_raised
+        remaining_kobo = farm.total_budget_kobo - farm.amount_raised_kobo
 
-        if investment.amount_kobo > remaining:
+        if investment.amount_kobo > remaining_kobo:
             investment.status = InvestmentStatus.FAILED
             investment.failure_reason = "Farm has already reached its funding goal"
             session.add(investment)
@@ -132,10 +132,10 @@ class InvestmentServices:
             investment.status = InvestmentStatus.CONFIRMED
             investment.interswitch_ref = result["raw"].get("PaymentReference")
             
-            farm.amount_raised += investment.amount_kobo
+            farm.amount_raised_kobo += investment.amount_kobo
             
             # Check if fully funded
-            if farm.amount_raised >= farm.total_budget:
+            if farm.amount_raised_kobo >= farm.total_budget_kobo:
                 farm.farm_status = FarmStatus.FUNDED
                 
                 # Fetch first milestone

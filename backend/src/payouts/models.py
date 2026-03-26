@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional
 from enum import Enum
 from sqlmodel import SQLModel, Field
+from pydantic import computed_field
 
 class PayoutStatus(str, Enum):
     WAITING = "waiting"
@@ -23,10 +24,25 @@ class Payout(SQLModel, table=True):
     recipient_type: RecipientType
     investment_id: Optional[uuid.UUID] = Field(default=None, foreign_key="investments.id")
     
-    principal_naira: int = 0  
-    profit_naira: int = 0     
-    total_amount_naira: int   
+    principal_kobo: int = 0  
+    profit_kobo: int = 0     
+    total_amount_kobo: int   
     
+    @computed_field
+    @property
+    def principal(self) -> float:
+        return self.principal_kobo / 100
+
+    @computed_field
+    @property
+    def profit(self) -> float:
+        return self.profit_kobo / 100
+
+    @computed_field
+    @property
+    def total_amount(self) -> float:
+        return self.total_amount_kobo / 100
+
     interswitch_ref: Optional[str] = None
     status: PayoutStatus = Field(default=PayoutStatus.WAITING)
     failure_reason: Optional[str] = None

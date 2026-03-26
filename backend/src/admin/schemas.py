@@ -18,13 +18,13 @@ class AdminFarmerOut(BaseModel):
     uid: uuid.UUID
     full_name: str
     email: str
-    bvn_verified: bool
-    bank_verified: bool
-    trust_score: Optional[int]
-    trust_tier: Optional[str]
-    account_number: Optional[str]
-    bank_code: Optional[str]
-    account_name: Optional[str]
+    bvn_verified: Optional[bool] = False
+    bank_verified: Optional[bool] = False
+    trust_score: Optional[int] = None
+    trust_tier: Optional[str] = None
+    account_number: Optional[str] = None
+    bank_code: Optional[str] = None
+    account_name: Optional[str] = None
 
 class AdminFarmOut(BaseModel):
     model_config = {"from_attributes": True}
@@ -35,21 +35,21 @@ class AdminFarmOut(BaseModel):
     lga: str
     farm_size_ha: float
     description: str
-    total_budget: int
-    amount_raised: int
+    total_budget: float
+    amount_raised: float
     expected_yield: float
-    sale_price_per_unit: int
+    sale_price_per_unit: float
     return_rate: float
     start_date: date
     harvest_date: date
     status: str
-    latitude: Optional[float]
-    longitude: Optional[float]
-    location_photo_url: Optional[str]
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    location_photo_url: Optional[str] = None
     listing_display_picture_url: List[str]
     full_display_picture_url: List[str]
     rejection_reason: Optional[str]
-    farmer: AdminFarmerOut
+    farmer: Optional[AdminFarmerOut] = None
     milestones: List[MilestoneOut]
     created_at: datetime
 
@@ -62,7 +62,7 @@ class AdminMilestoneOut(BaseModel):
     name: str
     order_number: int
     expected_week: int
-    amount: int
+    amount: float
     status: str
     proof_photo_url: Optional[str] = None
     proof_latitude: Optional[float] = None
@@ -78,7 +78,7 @@ class StatsOut(BaseModel):
     pending_reviews: int
     total_investors: int
     total_farmers: int
-    total_funds_raised: int
+    total_funds_raised: float
 
 class AdminFarmResponse(BaseModel):
     success: bool

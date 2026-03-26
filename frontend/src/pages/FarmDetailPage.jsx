@@ -10,6 +10,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { mockFarms, mockInvestorPortfolio } from '../data/mockData';
+import api from '../utils/api';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -156,10 +157,12 @@ function InvestmentModal({ farm, isOpen, onClose }) {
   const navigate = useNavigate();
 
   const numericAmount = amount ? parseFloat(amount) : 0;
-  const totalReturn = numericAmount ? (numericAmount * (1 + farm.returns.cashReturn / 100)) : 0;
+  const minInvestment = farm?.min_investment || 5000;
+  const returnRate = farm?.return_rate ? (farm.return_rate * 100).toFixed(0) : '—';
+  const totalReturn = numericAmount ? (numericAmount * (1 + farm.return_rate)) : 0;
   const profitEstimate = totalReturn - numericAmount;
   const cashReturn = numericAmount ? totalReturn.toFixed(0) : null;
-  const canProceed = numericAmount && numericAmount >= farm.returns.minInvestment;
+  const canProceed = numericAmount && numericAmount >= minInvestment;
 
   const handleProceed = () => {
     setStep(2);
@@ -182,7 +185,7 @@ function InvestmentModal({ farm, isOpen, onClose }) {
               onChange={e => setAmount(e.target.value)}
             />
           </div>
-          <p className="invest-min">Minimum: ₦{farm.returns.minInvestment.toLocaleString()}</p>
+          <p className="invest-min">Minimum: ₦{minInvestment.toLocaleString()}</p>
 
           <div className="invest-div-cards" style={{ gridTemplateColumns: '1fr' }}>
             <div className="invest-div-card selected" style={{ cursor: 'default', borderColor: 'var(--color-primary)' }}>
@@ -191,13 +194,15 @@ function InvestmentModal({ farm, isOpen, onClose }) {
               {cashReturn && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <span className="invest-estimate text-mono">Initial: ₦{numericAmount.toLocaleString()}</span>
-                  <span className="invest-estimate text-mono">Estimated Return: ₦{Math.round(totalReturn).toLocaleString()} (+{farm.returns.cashReturn}% uplift)</span>
+                  <span className="invest-estimate text-mono">Estimated Return: ₦{Math.round(totalReturn).toLocaleString()} (+{returnRate}% uplift)</span>
                   <span className="invest-estimate text-mono" style={{ color: 'var(--color-primary)' }}>Estimated Profit: ₦{Math.round(profitEstimate).toLocaleString()}</span>
                 </div>
               )}
             </div>
           </div>
 
+          <div className="review-row-mini"><span>Minimum Investment</span><strong>₦{(farm.min_investment||0).toLocaleString()}</strong></div>
+          <div className="review-row-mini"><span>Total Budget</span><strong>₦{(farm.total_budget||0).toLocaleString()}</strong></div>
           <button className="btn btn-solid btn-full btn-lg" disabled={!canProceed} onClick={handleProceed} style={{ marginTop: '8px' }}>
             Proceed to Payment
           </button>
@@ -260,27 +265,146 @@ export default function FarmDetailPage() {
   const { id } = useParams();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const farm = mockFarms.find(f => f.id === id) || mockFarms[0];
+  const [loading, setLoading] = useState(true);
   const [investOpen, setInvestOpen] = useState(false);
-  const isFarmer = user?.role === 'farmer';
-  const isAdmin = user?.role === 'admin';
-  const isInvestor = user?.role === 'investor';
-  const kycComplete = user?.bvn_verified && user?.bank_verified;
-  const percentFunded = Math.min(100, Math.round((farm.raised / farm.goal) * 100));
-  
-  const investment = isInvestor ? mockInvestorPortfolio.find(i => i.farmId === id || (i.farmName === farm.name)) || mockInvestorPortfolio[0] : null;
-  const isInvested = isInvestor && investment;
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const { addToast } = useToast();
+
+  const normalizeFarm = (raw) => {
+    if (!raw) return null;
+    const f = { ...raw };
+    
+    f.amount_raised = f.amount_raised_kobo ? f.amount_raised_kobo / 100 : (f.amount_raised ?? f.raised ?? 0);
+    f.total_budget = f.total_budget_kobo ? f.total_budget_kobo / 100 : (f.total_budget ?? f.goal ?? 1000000);
+    f.name = f.name || 'Unnamed Farm';
+    f.cropTag = f.crop_name || f.crop || 'Crop';
+    f.status = f.farm_status || f.status || 'active';
+    
+    f.expectedYield = f.expected_yield || 0;
+    f.yieldUnit = f.yield_unit || 'tons';
+
+    if (f.farmer) {
+      f.farmer = {
+        ...(raw.farmer || {}),
+        name: (raw.farmer?.full_name) || (raw.farmer?.name) || 'Anonymous Farmer',
+        memberSince: raw.farmer?.created_at ? new Date(raw.farmer.created_at).getFullYear() : '2024',
+        totalFarms: raw.farmer?.farms_count || 1,
+        bio: raw.farmer?.bio || 'AgriFlow Partner passionate about sustainable agriculture.',
+        state: raw.farmer?.state || raw.state || 'Ondo',
+        trustScore: raw.farmer?.trust_score ?? 0,
+        trustTier: raw.farmer?.trust_tier || 'unrated'
+      };
+    } else {
+      f.farmer = { name: 'Anonymous Farmer', state: f.state || 'Ondo', memberSince: '2024', totalFarms: 1, bio: 'AgriFlow Partner', trustScore: 0, trustTier: 'unrated' };
+    }
+    f.location = f.location || { state: f.state || 'N/A', lga: f.lga || 'N/A' };
+    f.photos = f.full_display_picture_url || f.listing_display_picture_url || f.photos || ['/placeholder-farm.jpg'];
+    f.transparencyScore = f.transparencyScore || { budgetDisclosed: true, proofsUploaded: !!(f.milestones?.some(m => m.proofs?.length)), adminVerified: f.farm_status === 'active' || f.farm_status === 'funded', yieldReported: false };
+    
+    if (!f.budget) {
+      f.budget = {
+        total: f.total_budget,
+        stages: f.milestones ? f.milestones.map(m => ({
+          name: m.name,
+          amount: m.amount || (m.budgetAllocated ?? 0),
+          percent: f.total_budget > 0 ? Math.round(((m.amount || m.budgetAllocated || 0) / f.total_budget) * 100) : 0,
+          status: m.status === 'verified' ? 'verified' : m.status === 'under_review' ? 'in_progress' : 'pending'
+        })) : []
+      };
+    }
+
+    if (f.milestones) {
+      const startDate = f.start_date ? new Date(f.start_date) : new Date();
+      f.milestones = f.milestones.map(m => ({
+        ...m,
+        dueDate: m.dueDate || new Date(startDate.getTime() + (m.expected_week || 0) * 7 * 24 * 60 * 60 * 1000).toISOString(),
+        budgetAllocated: m.budgetAllocated || m.amount || 0,
+        released: m.released || (m.status === 'verified' || m.status === 'disbursed' ? (m.amount || m.budgetAllocated) : null),
+        proofs: m.proofs || []
+      }));
+    } else {
+      f.milestones = [];
+    }
+
+    f.daysLeft = f.daysLeft ?? (f.harvest_date ? Math.max(0, Math.ceil((new Date(f.harvest_date) - new Date()) / (1000 * 60 * 60 * 24))) : 0);
+    f.investors = f.investors ?? 0;
+    return f;
+  };
+
+  const handleApprove = async () => {
+    try {
+      await api.post(`/admin/farms/${id}/approve`);
+      addToast('Farm approved successfully', 'success');
+      fetchFarm();
+    } catch (err) {
+      addToast(err.response?.data?.detail || 'Failed to approve farm', 'error');
+    }
+  };
+
+  const handleReject = async () => {
+    if (rejectionReason.length < 10) return;
+    try {
+      await api.post(`/admin/farms/${id}/reject`, { reason: rejectionReason });
+      addToast('Farm rejected', 'info');
+      setRejecting(false);
+      fetchFarm();
+    } catch (err) {
+      addToast(err.response?.data?.detail || 'Failed to reject farm', 'error');
+    }
+  };
+
+  const fetchFarm = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/farms/${id}`);
+      if (res.data.success) {
+        setFarmData(normalizeFarm(res.data.data));
+      }
+    } catch (err) {
+      console.error("Farm fetch failed:", err);
+      setFarmData(normalizeFarm(mockFarms.find(f => f.id === id) || mockFarms[0]));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
+    fetchFarm();
+  }, [id]);
+
+  useEffect(() => {
+    if (loading || !farmData) return;
     window.scrollTo(0, 0);
     const ctx = gsap.context(() => {
       gsap.fromTo('.detail-hero-section', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power2.out' });
       gsap.fromTo('.timeline-item', { x: -20, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, stagger: 0.1, ease: 'power2.out', scrollTrigger: { trigger: '.timeline', start: 'top 85%' } });
     });
     return () => ctx.revert();
-  }, [id]);
+  }, [id, loading, farmData]);
 
-  const grossProceeds = farm.status === 'funded' || farm.status === 'completed' ? farm.goal * 1.5 : 0; // mocked
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+      <div className="invest-spinner" style={{ width: '60px', height: '60px' }} />
+    </div>
+  );
+
+  const farm = farmData;
+  if (!farm) return null;
+
+  const isFarmer = user?.role === 'farmer';
+  const isAdmin = user?.role === 'admin';
+  const isInvestor = user?.role === 'investor';
+  const kycComplete = user?.bvn_verified && user?.bank_verified;
+  
+  const amountRaised = farm.amount_raised;
+  const totalBudget = farm.total_budget;
+  const progress = Math.min((amountRaised / totalBudget) * 100, 100);
+  
+  const investment = isInvestor ? mockInvestorPortfolio.find(i => i.farmId === id || (i.farmName === farm.name)) || mockInvestorPortfolio[0] : null;
+  const isInvested = isInvestor && investment;
+
+  const grossProceeds = farm.status === 'funded' || farm.status === 'completed' ? farm.total_budget * 1.5 : 0; // mocked
   const farmerShare = grossProceeds * 0.40;
   const investorPool = grossProceeds * 0.40;
   const platformFee = grossProceeds * 0.20;
@@ -333,16 +457,16 @@ export default function FarmDetailPage() {
               <div className="funding-strip">
                 <div className="funding-strip-bar">
                   <div className="progress-track" style={{ height: '8px' }}>
-                    <div className="progress-fill" style={{ width: `${percentFunded}%` }} />
+                    <div className="progress-fill" style={{ width: `${progress}%` }} />
                   </div>
                 </div>
                 <div className="funding-stats">
                   <div className="funding-stat">
-                    <span className="funding-stat-val text-mono">₦{(farm.raised / 1000000).toFixed(2)}M</span>
+                    <span className="funding-stat-val text-mono">₦{(amountRaised / 1000000).toFixed(2)}M</span>
                     <span className="funding-stat-label">Raised</span>
                   </div>
                   <div className="funding-stat">
-                    <span className="funding-stat-val text-mono">₦{(farm.goal / 1000000).toFixed(2)}M</span>
+                    <span className="funding-stat-val text-mono">₦{(totalBudget / 1000000).toFixed(2)}M</span>
                     <span className="funding-stat-label">Goal</span>
                   </div>
                   <div className="funding-stat">
@@ -372,12 +496,12 @@ export default function FarmDetailPage() {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
                       <span style={{ color: 'var(--color-text-secondary)' }}>Investor Returns (Principal + Profit)</span>
-                      <strong className="text-mono" style={{ color: 'var(--color-danger)' }}>-₦{(farm.goal * (1 + farm.returns.cashReturn/100)).toLocaleString()}</strong>
+                      <strong className="text-mono" style={{ color: 'var(--color-danger)' }}>-₦{(farm.total_budget * (1 + farm.return_rate)).toLocaleString()}</strong>
                     </div>
                     <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px' }}>
                       <span style={{ color: 'var(--color-text-primary)', fontWeight:600 }}>Your Net Profit</span>
-                      <strong className="text-mono" style={{ color: 'var(--color-primary)' }}>₦{(grossProceeds * 0.95 - (farm.goal * (1 + farm.returns.cashReturn/100))).toLocaleString()}</strong>
+                      <strong className="text-mono" style={{ color: 'var(--color-primary)' }}>₦{(grossProceeds * 0.95 - (farm.total_budget * (1 + farm.return_rate))).toLocaleString()}</strong>
                     </div>
                   </div>
                   <div style={{ marginTop: '20px', padding: '12px', background: 'var(--color-card)', borderRadius: '8px', fontSize: '13px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
@@ -452,16 +576,16 @@ export default function FarmDetailPage() {
                     <span style={{ color: 'var(--color-text-secondary)' }}>Farm size</span><span style={{ fontWeight: 500 }}>{farm.location.lga === 'Abeokuta South' ? '3' : '2'} hectares</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Expected yield</span><span style={{ fontWeight: 500 }}>{farm.expectedYield} – {farm.expectedYield * 1.5} {farm.yieldUnit}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>Expected yield</span><span style={{ fontWeight: 500 }}>{farm.expectedYield || 0} – {(farm.expectedYield || 0) * 1.5} {farm.yieldUnit}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Est. gross revenue</span><span style={{ fontWeight: 500 }}>₦{(farm.goal * 1.2).toLocaleString()} – ₦{(farm.goal * 2.5).toLocaleString()}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>Est. gross revenue</span><span style={{ fontWeight: 500 }}>₦{(farm.total_budget * 1.2).toLocaleString()} – ₦{(farm.total_budget * 2.5).toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Production cost</span><span className="text-mono" style={{ fontWeight: 500 }}>₦{farm.goal.toLocaleString()}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>Production cost</span><span className="text-mono" style={{ fontWeight: 500 }}>₦{farm.total_budget.toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)', gridColumn: '1 / -1' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Net Investor Pool</span><span className="text-mono" style={{ fontWeight: 500 }}>₦{(farm.goal * (1 + farm.returns.cashReturn/100)).toLocaleString()} Maximum</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>Net Investor Pool</span><span className="text-mono" style={{ fontWeight: 500 }}>₦{(farm.total_budget * (1 + farm.return_rate)).toLocaleString()} Maximum</span>
                   </div>
                 </div>
 
@@ -478,9 +602,9 @@ export default function FarmDetailPage() {
                     
                     {(() => {
                       const calcAmount = isInvested ? investment.invested : 50000;
-                      const expectedReturn = calcAmount * (1 + farm.returns.cashReturn/100);
-                      const consReturn = calcAmount * (1 + (Math.max(farm.returns.cashReturn - 5, 5))/100);
-                      const optReturn = calcAmount * (1 + (farm.returns.cashReturn + Math.min(6, farm.returns.cashReturn/2))/100);
+                      const expectedReturn = calcAmount * (1 + farm.return_rate);
+                      const consReturn = calcAmount * (1 + (Math.max(farm.return_rate * 100 - 5, 5))/100);
+                      const optReturn = calcAmount * (1 + (farm.return_rate * 100 + Math.min(6, (farm.return_rate * 100)/2))/100);
                       return (
                         <>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -494,7 +618,7 @@ export default function FarmDetailPage() {
                             <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>Expected <span style={{ fontSize: '12px', fontWeight: 400 }}>(Target)</span></span>
                             <div style={{ textAlign: 'right' }}>
                               <span className="text-mono" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', display: 'block' }}>₦{Math.round(expectedReturn).toLocaleString()}</span>
-                              <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>+{farm.returns.cashReturn}%</span>
+                              <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>+{(farm.return_rate * 100).toFixed(1)}%</span>
                             </div>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -516,55 +640,88 @@ export default function FarmDetailPage() {
               </div>
             </div>
 
-            {/* Farm Investment Action Block */}
-            {!isAdmin && (
-              <div className="card" style={{ padding: '32px', marginTop: '24px', background: 'var(--color-card)', border: '2px solid var(--color-border)' }}>
-                <h3 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '20px' }}>Funding Status</h3>
-                <div className="progress-track" style={{ marginBottom: '16px', height: '12px' }}>
-                  <div className="progress-fill" style={{ width: `${percentFunded}%` }} />
+            {/* Farm Investment Action / Admin Review Block */}
+            <div className="card" style={{ padding: '32px', marginTop: '24px', background: 'var(--color-card)', border: '2px solid var(--color-border)' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '20px' }}>{isAdmin && farm.status === 'pending' ? 'Admin Review' : 'Funding Status'}</h3>
+              
+              <div className="progress-track" style={{ marginBottom: '16px', height: '12px' }}>
+                <div className="progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+              
+              <div className="detail-sidebar-stats" style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                <div>
+                  <strong className="text-mono" style={{ fontSize: '24px' }}>₦{(amountRaised / 1000000).toFixed(2)}M</strong>
+                  <span style={{ fontSize: '14px', color: 'var(--color-text-secondary)', display: 'block' }}>of ₦{(totalBudget / 1000000).toFixed(2)}M goal</span>
                 </div>
-                <div className="detail-sidebar-stats" style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                  <div>
-                    <strong className="text-mono" style={{ fontSize: '24px' }}>₦{(farm.raised / 1000000).toFixed(2)}M</strong>
-                    <span style={{ fontSize: '14px', color: 'var(--color-text-secondary)', display: 'block' }}>of ₦{(farm.goal / 1000000).toFixed(2)}M goal</span>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <strong className="text-mono" style={{ color: 'var(--color-primary)', fontSize: '24px' }}>{percentFunded}%</strong>
-                    <span style={{ fontSize: '14px', color: 'var(--color-text-secondary)', display: 'block' }}>Funded</span>
-                  </div>
+                <div style={{ textAlign: 'right' }}>
+                  <strong className="text-mono" style={{ color: 'var(--color-primary)', fontSize: '24px' }}>{progress.toFixed(0)}%</strong>
+                  <span style={{ fontSize: '14px', color: 'var(--color-text-secondary)', display: 'block' }}>Funded</span>
                 </div>
+              </div>
 
-                {isFarmer ? (
-                  <div className="farmer-readonly">
-                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: '16px' }}>
-                      You're viewing this as the farmer. Only investors can fund farms.
-                    </p>
-                    <Link to="/farmer/dashboard" className="btn-solid btn" style={{ width: '100%', textAlign: 'center' }}>Go to Dashboard</Link>
+              {isAdmin ? (
+                farm.status === 'pending' ? (
+                  <div className="admin-actions">
+                    {!rejecting ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <button className="btn btn-solid btn-lg" onClick={handleApprove} style={{ background: 'var(--color-primary)' }}>Approve Farm</button>
+                        <button className="btn btn-ghost btn-lg" onClick={() => setRejecting(true)} style={{ color: 'var(--color-danger)' }}>Reject Farm</button>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '16px', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                        <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '12px', color: 'var(--color-danger)' }}>Reason for Rejection</p>
+                        <textarea 
+                          className="form-input" 
+                          placeholder="Please provide details (min 10 chars)..." 
+                          rows={3}
+                          value={rejectionReason}
+                          onChange={e => setRejectionReason(e.target.value)}
+                          style={{ marginBottom: '16px', padding: '12px' }}
+                        />
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <button className="btn btn-solid btn-sm" style={{ background: 'var(--color-danger)' }} onClick={handleReject} disabled={rejectionReason.length < 10}>Confirm Rejection</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setRejecting(false)}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '12px' }}>
-                      {user && isInvestor && !kycComplete ? (
-                        <button className="btn btn-solid btn-lg" onClick={() => navigate('/investor/dashboard?tab=settings')} style={{ background: 'var(--color-accent)', border: 'none' }}>
-                          Verify KYC to Invest
-                        </button>
-                      ) : (
-                        <button className="btn btn-solid btn-lg" onClick={() => {
-                          if (!user) navigate('/auth?tab=login');
-                          else setInvestOpen(true);
-                        }} disabled={farm.status === 'funded' || farm.daysLeft === 0}>
-                          {farm.status === 'funded' ? 'Fully Funded' : isInvested ? 'Invest More' : 'Invest Here'}
-                        </button>
-                      )}
-                      <button className="btn btn-ghost btn-lg">Save Farm</button>
-                    </div>
-                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '16px', textAlign: 'center' }}>
-                      Funds are held in escrow and released in stages after verification.
+                  <div className="admin-status-note" style={{ padding: '16px', background: 'var(--color-card-alt)', borderRadius: '12px', textAlign: 'center' }}>
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
+                      This farm is <strong>{farm.status.toUpperCase()}</strong>. No further administrative action required.
                     </p>
-                  </>
-                )}
-              </div>
-            )}
+                  </div>
+                )
+              ) : isFarmer ? (
+                <div className="farmer-readonly">
+                  <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: '16px' }}>
+                    You're viewing this as the farmer. Only investors can fund farms.
+                  </p>
+                  <Link to="/farmer/dashboard" className="btn-solid btn" style={{ width: '100%', textAlign: 'center' }}>Go to Dashboard</Link>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '12px' }}>
+                    {user && isInvestor && !kycComplete ? (
+                      <button className="btn btn-solid btn-lg" onClick={() => navigate('/investor/dashboard?tab=settings')} style={{ background: 'var(--color-accent)', border: 'none' }}>
+                        Verify KYC to Invest
+                      </button>
+                    ) : (
+                      <button className="btn btn-solid btn-lg" onClick={() => {
+                        if (!user) navigate('/auth?tab=login');
+                        else setInvestOpen(true);
+                      }} disabled={farm.status === 'funded' || farm.daysLeft === 0}>
+                        {farm.status === 'funded' ? 'Fully Funded' : isInvested ? 'Invest More' : 'Invest Here'}
+                      </button>
+                    )}
+                    <button className="btn btn-ghost btn-lg">Save Farm</button>
+                  </div>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '16px', textAlign: 'center' }}>
+                    Funds are held in escrow and released in stages after verification.
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

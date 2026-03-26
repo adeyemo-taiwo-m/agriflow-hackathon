@@ -18,17 +18,26 @@ class HarvestReport(SQLModel, table=True):
     farmer_id: uuid.UUID = Field(foreign_key="users.uid")
     
     actual_yield: float
-    total_sales_declared: int  # Farmer's self-reported revenue in Naira
+    total_sales_declared_kobo: int  # Farmer's self-reported revenue in Kobo
     harvest_date: date
     buyer_name: Optional[str] = None
     payment_evidence_public_id: str = Field(exclude=True)
     
-    admin_confirmed_sales: Optional[int] = None # In Naira
+    admin_confirmed_sales_kobo: Optional[int] = None # In Kobo
     status: HarvestReportStatus = Field(default=HarvestReportStatus.SUBMITTED)
     rejection_reason: Optional[str] = None
     
-    submitted_at: datetime = Field(default_factory=datetime.utcnow)
-    verified_at: Optional[datetime] = None
+    @computed_field
+    @property
+    def total_sales_declared(self) -> float:
+        return self.total_sales_declared_kobo / 100
+
+    @computed_field
+    @property
+    def admin_confirmed_sales(self) -> Optional[float]:
+        if self.admin_confirmed_sales_kobo is None:
+            return None
+        return self.admin_confirmed_sales_kobo / 100
 
     @computed_field
     @property

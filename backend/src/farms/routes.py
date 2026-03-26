@@ -9,6 +9,7 @@ from src.farms.schemas import (
     FarmCreate,
     UploadFarmLocations,
     FarmOutResponse,
+    FarmDetailResponse,
     FarmOutListResponse,
     FarmListResponse,
 )
@@ -94,7 +95,7 @@ async def get_farms(
         "data": farms
     }
 
-@farm_router.get('/{farm_id}', status_code=status.HTTP_200_OK, response_model=FarmOutResponse)
+@farm_router.get('/{farm_id}', status_code=status.HTTP_200_OK, response_model=FarmDetailResponse)
 async def get_farm(
     farm_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),

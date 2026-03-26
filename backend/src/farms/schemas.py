@@ -3,6 +3,7 @@ from typing import List, Optional
 from datetime import datetime, date
 from pydantic import Field, BaseModel, field_validator
 import uuid
+from src.milestones.schemas import ProofOut
 
 class FarmCreate(BaseModel):
     
@@ -14,10 +15,10 @@ class FarmCreate(BaseModel):
     farm_size_ha: float = Field(..., gt=0) 
     description: str = Field(..., min_length=20)
 
-    total_budget: int = Field(..., gt=0)
+    total_budget: float = Field(..., gt=0)
 
     expected_yield: float = Field(..., gt=0)
-    sale_price_per_unit: int = Field(..., gt=0)
+    sale_price_per_unit: float = Field(..., gt=0)
     return_rate: float = Field(..., gt=0, le=0.28) 
 
     start_date: date
@@ -35,8 +36,9 @@ class MilestoneOut(BaseModel):
     name: str
     order_number: int
     expected_week: int
-    amount: int
+    amount: float
     status: str
+    proofs: List[ProofOut] = []
 
 class FarmerPublicOut(BaseModel):
     uid: uuid.UUID
@@ -55,10 +57,10 @@ class FarmOut(BaseModel):
     lga: str
     farm_size_ha: float
     description: str
-    total_budget: int
-    amount_raised: int
+    total_budget: float
+    amount_raised: float
     expected_yield: float
-    sale_price_per_unit: int
+    sale_price_per_unit: float
     return_rate: float
     start_date: date
     harvest_date: date
@@ -71,8 +73,10 @@ class FarmOut(BaseModel):
     location_photo_url: Optional[str] = None
     
     farmer: Optional[FarmerPublicOut] = None
-    milestones: List[MilestoneOut] = []
     created_at: datetime
+
+class FarmDetailOut(FarmOut):
+    milestones: List[MilestoneOut] = []
 
 class FarmListOut(BaseModel):
     model_config = {"from_attributes": True}
@@ -84,10 +88,10 @@ class FarmListOut(BaseModel):
     lga: str
     farm_size_ha: float
     description: str
-    total_budget: int
-    amount_raised: int
+    total_budget: float
+    amount_raised: float
     expected_yield: float
-    sale_price_per_unit: int
+    sale_price_per_unit: float
     return_rate: float
     start_date: date
     harvest_date: date
@@ -106,6 +110,12 @@ class FarmOutResponse(BaseModel):
     success: bool
     message: str
     data: FarmOut
+
+
+class FarmDetailResponse(BaseModel):
+    success: bool
+    message: str
+    data: FarmDetailOut
 
 
 class FarmOutListResponse(BaseModel):

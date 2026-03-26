@@ -151,9 +151,9 @@ function FarmCreationForm({ onDone }) {
 
     // Validate all required numeric fields before submitting
     const farmSizeHa = parseFloat(data.size);
-    const totalBudget = parseInt(data.totalBudget);
+    const totalBudget = parseFloat(data.totalBudget);
     const expectedYield = parseFloat(data.expectedYield);
-    const salePricePerUnit = parseInt(data.salePrice);
+    const salePricePerUnit = parseFloat(data.salePrice);
     const returnRate = parseFloat(data.returnRate);
 
     if (!data.name || data.name.trim().length < 3) return addToast("Farm name must be at least 3 characters", "error");
@@ -499,7 +499,7 @@ function ProofUpload({ milestone, onSuccess }) {
         addToast("Location Warning", "warning", "You are 1km-5km from the farm. This proof will require manual admin review.");
         onSuccess(milestone.id);
       } else {
-        addToast("Proof Submitted ✅", "success", "GPS Verified. Your milestone is now under review.");
+        addToast("Proof Submitted", "success", "GPS Verified. Your milestone is now under review.");
         onSuccess(milestone.id);
       }
     } catch (err) {
@@ -797,7 +797,7 @@ export default function FarmerDashboard() {
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    {user?.bvn_verified ? '✅ BVN Verified' : '⭕ Verify BVN'}
+                    {user?.bvn_verified ? '✓ BVN Verified' : 'Verify BVN'}
                   </span>
                   <span style={{ color: 'var(--color-text-muted)' }}>→</span>
                   <span style={{ 
@@ -807,7 +807,7 @@ export default function FarmerDashboard() {
                     alignItems: 'center',
                     gap: '4px'
                   }}>
-                    {user?.bank_verified ? '✅ Bank Account Added' : 'Add Bank Account'}
+                    {user?.bank_verified ? '✓ Bank Account Added' : 'Add Bank Account'}
                   </span>
                 </div>
               </div>
@@ -833,7 +833,7 @@ export default function FarmerDashboard() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <span style={{ fontSize: '32px', fontWeight: 800, color: 'var(--color-primary)' }}>{user?.trust_score || 0}</span>
                     <span style={{ fontSize: '18px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
-                    <span className="badge badge-active" style={{ marginLeft: '12px', background: 'var(--color-primary)', color: '#fff' }}>⭐ {user?.trust_tier || 'Emerging Farmer'}</span>
+                    <span className="badge badge-active" style={{ marginLeft: '12px', background: 'var(--color-primary)', color: '#fff', padding: '6px 12px' }}>{user?.trust_tier || 'Emerging Farmer'}</span>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '13px', color: 'var(--color-text-secondary)', maxWidth: '240px' }}>
@@ -853,10 +853,10 @@ export default function FarmerDashboard() {
             {displayFarms.some(f => f.status === 'deadline_passed') && displayFarms.filter(f => f.status === 'deadline_passed').map(farm => (
               <div key={`dp-${farm.id}`} style={{background:'rgba(180,120,0,0.07)',border:'2px solid var(--color-accent)',borderRadius:'12px',padding:'20px 24px',marginBottom:'20px'}}>
                 <div style={{display:'flex',gap:'12px',alignItems:'flex-start',marginBottom:'14px'}}>
-                  <span style={{fontSize:'22px',flexShrink:0}}>⚠️</span>
+                  <div style={{width:'32px',height:'32px',backgroundColor:'var(--color-accent)',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:'#fff'}}>!</div>
                   <div>
-                    <p style={{fontWeight:700,fontSize:'15px',marginBottom:'4px'}}>Your farm "{farm.name}" did not reach its funding goal of ₦{(farm.goal||0).toLocaleString()}</p>
-                    <p style={{fontSize:'13px',color:'var(--color-text-secondary)',lineHeight:1.5}}>You raised ₦{(farm.raised||0).toLocaleString()} ({farm.goal ? Math.round((farm.raised/farm.goal)*100) : 0}%). You have <strong>47 hours</strong> to decide:</p>
+                    <p style={{fontWeight:700,fontSize:'15px',marginBottom:'4px'}}>Your farm "{farm.name}" did not reach its funding goal of ₦{(farm.total_budget||0).toLocaleString()}</p>
+                    <p style={{fontSize:'13px',color:'var(--color-text-secondary)',lineHeight:1.5}}>You raised ₦{(farm.amount_raised||0).toLocaleString()} ({farm.total_budget ? Math.round((farm.amount_raised/farm.total_budget)*100) : 0}%). You have <strong>47 hours</strong> to decide:</p>
                   </div>
                 </div>
                 <div style={{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'10px'}}>
@@ -878,7 +878,7 @@ export default function FarmerDashboard() {
                       <div style={{display:'flex',alignItems:'center',gap:'16px',flexWrap:'wrap'}}>
                         <div style={{flex:1,minWidth:'160px'}}><h3 style={{fontWeight:600,fontSize:'16px'}}>{farm.name}</h3><p style={{fontSize:'13px',color:'var(--color-text-secondary)'}}>{farm.crop}</p></div>
                         <span className={`badge badge-${statusBadge}`} style={{textTransform:'capitalize'}}>{statusLabel}</span>
-                        {farm.raised>0 && <div style={{display:'flex',alignItems:'center',gap:'10px',minWidth:'180px'}}><div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:`${pct}%`}}/></div><span className="text-mono" style={{fontSize:'13px',fontWeight:600}}>{pct}%</span></div>}
+                        {farm.amount_raised>0 && <div style={{display:'flex',alignItems:'center',gap:'10px',minWidth:'180px'}}><div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:`${Math.round((farm.amount_raised/farm.total_budget)*100)}%`}}/></div><span className="text-mono" style={{fontSize:'13px',fontWeight:600}}>{Math.round((farm.amount_raised/farm.total_budget)*100)}%</span></div>}
                         <div style={{display:'flex',gap:'8px'}}>
                           <Link to={`/farms/${farm.id}`} className="btn btn-ghost btn-sm">Manage</Link>
                           {!['deadline_passed','cancelled','rejected'].includes(farm.status) && (
@@ -900,13 +900,47 @@ export default function FarmerDashboard() {
             <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'24px',fontFamily:'var(--font-heading)'}}>Add a Farm</h1>
             {!kycComplete ? (
               <div className="card" style={{padding:'40px',textAlign:'center'}}>
-                <span style={{fontSize:'40px',display:'block',marginBottom:'16px'}}>🔒</span>
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px',
+                  color: '#f59e0b'
+                }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </div>
                 <h3 style={{fontWeight:600,fontSize:'18px',marginBottom:'8px'}}>Verification Required</h3>
                 <p style={{color:'var(--color-text-secondary)',marginBottom:'24px',maxWidth:'400px',margin:'0 auto 24px'}}>You must complete your BVN and Bank Account verification in Settings before creating a farm.</p>
                 <button className="btn btn-solid" onClick={() => handleTabChange('settings')}>Go to Settings</button>
               </div>
             ) : done ? (
-              <div className="card" style={{padding:'48px',textAlign:'center'}}><div style={{fontSize:'48px',marginBottom:'16px'}}>✅</div><h2 style={{fontWeight:600,marginBottom:'8px'}}>Submitted for Review</h2><p style={{color:'var(--color-text-secondary)'}}>Our team will review within 24 hours.</p><button className="btn btn-solid" style={{marginTop:'20px'}} onClick={()=>{setDone(false);handleTabChange('farms');}}>Back to My Farms</button></div>
+              <div className="card" style={{padding:'64px 48px',textAlign:'center'}}>
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 24px',
+                  color: '#10b981'
+                }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <h2 style={{fontWeight:700,fontSize:'24px',marginBottom:'12px',color:'var(--color-text-primary)'}}>Submitted for Review</h2>
+                <p style={{color:'var(--color-text-secondary)',fontSize:'16px',maxWidth:'320px',margin:'0 auto'}}>Our team will review your farm listing within 24 hours.</p>
+                <button className="btn btn-solid" style={{marginTop:'32px',padding:'12px 32px'}} onClick={()=>{setDone(false);handleTabChange('farms');}}>Back to My Farms</button>
+              </div>
             ) : <FarmCreationForm onDone={()=>setDone(true)}/>}
           </div>
         )}
@@ -946,7 +980,7 @@ export default function FarmerDashboard() {
                 
                 {detailsSaved ? (
                   <div style={{ padding: '16px', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary-dark)', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '18px' }}>✓</span> Your details are saved. You'll receive payouts here.
+                  <div style={{ width: '20px', height: '20px', backgroundColor: 'var(--color-primary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyCenter: 'center', color: '#fff', fontSize: '12px' }}>✓</div> Your details are saved. You'll receive payouts here.
                   </div>
                 ) : null}
                 
