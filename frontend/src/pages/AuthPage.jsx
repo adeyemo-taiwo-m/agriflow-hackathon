@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -13,6 +13,7 @@ export default function AuthPage() {
   const { login, signup, demoLogin } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { register, handleSubmit, formState: { errors }, reset, setError, setValue } = useForm();
 
@@ -53,8 +54,8 @@ export default function AuthPage() {
         addToast('Logged in to demo account successfully!', 'success');
       }
       setLoading(false);
-      if (selectedRole === 'farmer') navigate('/farmer/dashboard');
-      else navigate('/investor/dashboard');
+      const target = location.state?.from || (selectedRole === 'farmer' ? '/farmer/dashboard' : '/investor/dashboard');
+      navigate(target);
       return;
     }
 
@@ -79,8 +80,8 @@ export default function AuthPage() {
       
       const userRole = response?.data?.role || selectedRole;
       addToast('Welcome to AgriFlow!', 'success');
-      if (userRole === 'farmer') navigate('/farmer/dashboard');
-      else navigate('/investor/dashboard');
+      const target = location.state?.from || (userRole === 'farmer' ? '/farmer/dashboard' : '/investor/dashboard');
+      navigate(target);
     } catch (err) {
       if (err.response) {
         if (err.response.status === 409) {

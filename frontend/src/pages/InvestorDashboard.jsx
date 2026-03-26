@@ -51,8 +51,41 @@ export default function InvestorDashboard() {
   const { user, logout, fetchProfile } = useAuth();
   const [isKycOpen, setIsKycOpen] = useState(false);
   
+  const [investments, setInvestments] = useState([]);
+  const [expectedPayouts, setExpectedPayouts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [banks, setBanks] = useState([]);
+
+  const initData = async () => {
+    try {
+      const [invRes, payRes, bankRes] = await Promise.all([
+        api.get("/investments"),
+        api.get("/investments/payouts/expected"),
+        api.get("/banks")
+      ]);
+      setInvestments(invRes.data.data);
+      setExpectedPayouts(payRes.data.data);
+      setBanks(bankRes.data.data || []);
+      
+      // Update local payout details from user object if available
+      if (user?.bank_account_number) {
+        setPayoutDetails({
+          accountName: user.bank_account_name || "",
+          bankCode: user.bank_code || "",
+          accountNumber: user.bank_account_number || "",
+        });
+        setDetailsSaved(true);
+      }
+    } catch (err) {
+      console.error("Failed to fetch dashboard data", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchProfile();
+    initData();
   }, []);
 
   const kycComplete = user?.bvn_verified && user?.bank_verified;
@@ -62,9 +95,9 @@ export default function InvestorDashboard() {
   useEffect(() => setPayoutsPage(1), [payoutsViewMode]);
 
   const pbStart = (payoutsPage - 1) * ITEMS_PER_PAGE;
-  const displayPortfolio = user?.isNewUser ? [] : mockInvestorPortfolio;
-  const displayPayouts = user?.isNewUser ? [] : mockExpectedPayoutsExpanded;
-  const displayAllPayouts = user?.isNewUser ? [] : mockAllPayouts;
+  const displayPortfolio = investments;
+  const displayPayouts = expectedPayouts;
+  const displayAllPayouts = []; // Mock historic payouts for now or fetch from a returns API
   const paginatedPayouts = displayPayouts.slice(
     pbStart,
     pbStart + ITEMS_PER_PAGE,

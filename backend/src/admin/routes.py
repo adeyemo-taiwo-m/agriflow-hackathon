@@ -164,3 +164,30 @@ async def admin_initiate_payouts(
         "message": "payouts initiated successfully", 
         "data": result
     }
+
+@admin_router.get("/farms", response_model=AdminFarmListResponse, status_code=status.HTTP_200_OK)
+async def get_all_farms(
+    session: AsyncSession = Depends(get_session),
+    admin = Depends(get_current_admin),
+    admin_services: AdminServices = Depends(get_admin_services)
+):
+    farms_data = await admin_services.get_all_farms(session)
+    return {
+        "success": True,
+        "message": "All farms retrieved successfully",
+        "data": farms_data
+    }
+
+@admin_router.get("/payouts/{farm_id}")
+async def get_farm_payouts(
+    farm_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    admin = Depends(get_current_admin),
+    admin_services: AdminServices = Depends(get_admin_services)
+):
+    payouts = await admin_services.get_farm_payouts(farm_id, session)
+    return {
+        "success": True, 
+        "message": "payouts retrieved successfully", 
+        "data": payouts
+    }

@@ -72,6 +72,11 @@ class RenewAccessTokenResponse(BaseModel):
     message: str
     data: dict
 
+class PayoutSettingsInput(BaseModel):
+    accountName: str
+    bankCode: str
+    accountNumber: str
+
 class LogoutResponse(BaseModel):
     success: bool
     message: str

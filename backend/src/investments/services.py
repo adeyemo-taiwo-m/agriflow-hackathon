@@ -190,12 +190,81 @@ class InvestmentServices:
         investments = []
         for inv, farm in rows:
             investments.append({
-                "id": inv.id,
-                "farm_id": inv.farm_id,
-                "farm_name": farm.name,
+                "id": str(inv.id),
+                "farmId": str(inv.farm_id),
+                "farmName": farm.name,
+                "crop": farm.crop_name,
                 "amount": inv.amount_kobo / 100,
                 "status": inv.status,
+                "farm_status": farm.farm_status,
+                "expected_return": (inv.amount_kobo * (1 + farm.return_rate)) / 100,
+                "return_rate_pct": farm.return_rate * 100,
                 "created_at": inv.created_at
             })
             
         return investments
+
+    async def get_expected_payouts(self, investor, session: AsyncSession):
+        from src.harvest.models import HarvestReport, HarvestReportStatus
+        from src.payouts.models import Payout, PayoutStatus
+        
+        result = await session.exec(
+            select(Investment, Farm)
+            .join(Farm, Farm.id == Investment.farm_id)
+            .where(Investment.investor_id == investor.uid)
+            .where(Investment.status == InvestmentStatus.CONFIRMED)
+        )
+        rows = result.all()
+        
+        payouts = []
+        for inv, farm in rows:
+            # Calculate status step (1-5)
+            # 1: Invested (Confirmed) - default
+            # 2: Milestones Done
+            # 3: Harvest Collected
+            # 4: Proceeds In (Proceeds confirmed by admin)
+            # 5: Payout Sent
+            
+            step = 1
+            
+            # Check Milestones
+            ms_result = await session.exec(select(Milestone).where(Milestone.farm_id == farm.id))
+            milestones = ms_result.all()
+            all_done = len(milestones) > 0 and all(m.status in [MilestoneStatus.VERIFIED, MilestoneStatus.DISBURSED] for m in milestones)
+            if all_done:
+                step = 2
+            
+            # Check Harvest
+            hr_result = await session.exec(select(HarvestReport).where(HarvestReport.farm_id == farm.id))
+            report = hr_result.first()
+            if report and report.status == HarvestReportStatus.VERIFIED:
+                step = 3
+            
+            # Check Proceeds In (Farm Status COMPLETED or PAID_OUT)
+            if farm.farm_status in [FarmStatus.COMPLETED, FarmStatus.PAID_OUT]:
+                step = 4
+            
+            # Check Payout Sent
+            p_result = await session.exec(
+                select(Payout)
+                .where(Payout.investment_id == inv.id)
+                .where(Payout.status == PayoutStatus.COMPLETED)
+            )
+            payout_rec = p_result.first()
+            if payout_rec:
+                step = 5
+            
+            payouts.append({
+                "id": str(inv.id),
+                "farmId": str(farm.id),
+                "farmName": farm.name,
+                "crop": farm.crop_name,
+                "investedAmount": inv.amount_kobo / 100,
+                "expected": (inv.amount_kobo * (1 + farm.return_rate)) / 100,
+                "expectedDate": farm.harvest_date,
+                "statusStep": step,
+                "status": "Successful" if step == 5 else "Processing",
+                "dateStatus": "imminent" if farm.farm_status == FarmStatus.FUNDED else "normal"
+            })
+            
+        return payouts
