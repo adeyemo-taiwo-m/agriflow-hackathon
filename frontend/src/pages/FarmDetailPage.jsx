@@ -266,6 +266,7 @@ export default function FarmDetailPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [farmData, setFarmData] = useState(null);
   const [investOpen, setInvestOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');

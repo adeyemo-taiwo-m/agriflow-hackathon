@@ -48,7 +48,7 @@ class AdminFarmOut(BaseModel):
     location_photo_url: Optional[str] = None
     listing_display_picture_url: List[str]
     full_display_picture_url: List[str]
-    rejection_reason: Optional[str]
+    rejection_reason: Optional[str] = None
     farmer: Optional[AdminFarmerOut] = None
     milestones: List[MilestoneOut]
     created_at: datetime
