@@ -584,6 +584,7 @@ function MilestonesTab() {
   const [milestones, setMilestones] = useState([]);
   const [fetchingMilestones, setFetchingMilestones] = useState(false);
   const { addToast } = useToast();
+  const { user } = useAuth();
 
   const fetchFarms = async () => {
     try {
@@ -882,24 +883,60 @@ function MilestonesTab() {
   );
 }
 
-function HarvestTab() {
-  const { user } = useAuth();
-  const [ay, setAy] = useState('');
-  const [evidence, setEvidence] = useState(null);
-  const [selectedFarm, setSelectedFarm] = useState('');
+function HarvestTab({ farms }) {
   const { addToast } = useToast();
+  const [ay, setAy] = useState('');
+  const [totalSales, setTotalSales] = useState('');
+  const [harvestDate, setHarvestDate] = useState('');
+  const [evidence, setEvidence] = useState(null);
+  const [selectedFarmId, setSelectedFarmId] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const farms = user?.isNewUser ? [] : mockFarmerFarms;
-  const expected = 4.2;
-  const v = ay ? (((parseFloat(ay)-expected)/expected)*100).toFixed(1) : null;
   const { getRootProps, getInputProps } = useDropzone({ maxFiles: 1, onDrop: files => setEvidence(files[0]) });
 
-  if (user?.isNewUser) {
+  // Filter farms that are ready for harvest (all milestones disbursed)
+  const readyFarms = (farms || []).filter(f => 
+    f.milestones && f.milestones.length > 0 && f.milestones.every(m => m.status === 'disbursed')
+  );
+
+  const selectedFarm = readyFarms.find(f => f.id === selectedFarmId);
+  const expectedYield = selectedFarm?.expected_yield || 0;
+  const variance = ay && expectedYield ? (((parseFloat(ay) - expectedYield) / expectedYield) * 100).toFixed(1) : null;
+
+  const handleSubmit = async () => {
+    if (!selectedFarmId || !ay || !totalSales || !evidence) return;
+    
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('actual_yield', ay);
+      formData.append('total_sales', totalSales);
+      formData.append('harvest_date', harvestDate);
+      formData.append('evidence', evidence);
+      
+      await api.post(`/farms/${selectedFarmId}/harvest-report`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      addToast('Harvest report submitted!', 'success', 'Verification step initiated.');
+      // Reset form
+      setAy('');
+      setTotalSales('');
+      setEvidence(null);
+      setSelectedFarmId('');
+    } catch (err) {
+      addToast(err.response?.data?.message || "Failed to submit harvest report", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (readyFarms.length === 0) {
     return (
       <div>
-        <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'24px',fontFamily:'var(--font-heading)'}}>Harvest Report</h1>
+        <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'24px',fontFamily:'var(--font-heading)'}}>Harvest Reports</h1>
         <div className="card" style={{padding:'40px',textAlign:'center'}}>
-           <p style={{color:'var(--color-text-secondary)',marginBottom:'16px'}}>You don't have any active farms ready for harvest yet.</p>
+           <p style={{color:'var(--color-text-secondary)',marginBottom:'16px'}}>You don't have any farms ready for harvest reporting yet. All milestones must be disbursed first.</p>
         </div>
       </div>
     );
@@ -909,21 +946,37 @@ function HarvestTab() {
     <div>
       <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'24px',fontFamily:'var(--font-heading)'}}>Harvest Report</h1>
       <div className="card" style={{padding:'28px',maxWidth:'560px',display:'flex',flexDirection:'column',gap:'16px'}}>
-        <div className="form-group"><label className="form-label">Select Farm</label>
-          <select className="form-input form-select" value={selectedFarm} onChange={e=>setSelectedFarm(e.target.value)}>
-             {farms.length === 0 ? <option value="">No farms available</option> : farms.map(f => <option key={f.id} value={f.id}>{f.name} - {f.crop}</option>)}
+        <div className="form-group">
+          <label className="form-label">Select Ready Farm</label>
+          <select className="form-input form-select" value={selectedFarmId} onChange={e=>setSelectedFarmId(e.target.value)}>
+             <option value="">-- Choose Farm --</option>
+             {readyFarms.map(f => <option key={f.id} value={f.id}>{f.name} ({f.crop_name})</option>)}
           </select>
         </div>
+
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:'12px'}}>
-          <div className="form-group"><label className="form-label">Actual Yield ({farms.find(f => f.id === selectedFarm)?.crop === 'Poultry' ? 'birds' : 'tons'})</label><input className="form-input" type="number" value={ay} onChange={e=>setAy(e.target.value)} placeholder="e.g. 3.8"/></div>
-          <div className="form-group"><label className="form-label">Unit</label><select className="form-input form-select"><option>tons</option><option>kg</option></select></div>
+          <div className="form-group">
+            <label className="form-label">Actual Yield ({selectedFarm?.crop_name === 'Poultry' ? 'birds' : 'tons'})</label>
+            <input className="form-input" type="number" value={ay} onChange={e=>setAy(e.target.value)} placeholder={`Expected: ${expectedYield}`}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Unit</label>
+            <input className="form-input" value={selectedFarm?.crop_name === 'Poultry' ? 'birds' : 'tons'} disabled />
+          </div>
         </div>
-        <div className="form-group"><label className="form-label">Total Sales (₦)</label><CurrencyInput className="form-input text-mono" placeholder="e.g. 950,000"/></div>
-        <div className="form-group"><label className="form-label">Harvest Date</label><input className="form-input" type="date"/></div>
-        <div className="form-group"><label className="form-label">Buyer (optional)</label><input className="form-input" placeholder="e.g. Dangote Foods"/></div>
+
+        <div className="form-group">
+          <label className="form-label">Total Sales (₦)</label>
+          <CurrencyInput className="form-input text-mono" value={totalSales} onChange={e => setTotalSales(e.target.value)} placeholder="e.g. 950,000"/>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Harvest Completion Date</label>
+          <input className="form-input" type="date" value={harvestDate} onChange={e => setHarvestDate(e.target.value)}/>
+        </div>
         
         <div className="form-group">
-          <label className="form-label">Payment Evidence <span style={{color:'var(--color-danger)'}}>*</span></label>
+          <label className="form-label">Sales Evidence (Receipt/Bank Alert) <span style={{color:'var(--color-danger)'}}>*</span></label>
           <div {...getRootProps()} style={{border:'2px dashed var(--color-border)',padding:'20px',borderRadius:'8px',textAlign:'center',cursor:'pointer',background:evidence?'var(--color-primary-light)':'transparent',borderColor:evidence?'var(--color-primary)':'var(--color-border)'}}>
             <input {...getInputProps()}/>
             {evidence ? (
@@ -935,14 +988,17 @@ function HarvestTab() {
           <p style={{fontSize:'11px',color:'var(--color-text-secondary)',marginTop:'6px'}}>Required to verify harvest proceeds before investor payout.</p>
         </div>
 
-        {v!==null && (
-          <div style={{padding:'12px 16px',background:'var(--color-card-alt)',borderRadius:'8px',fontSize:'13px',display:'flex',gap:'24px',flexWrap:'wrap'}}>
-            <span>Expected: <strong>{expected} tons</strong></span>
-            <span>Reported: <strong>{ay} tons</strong></span>
-            <span>Variance: <strong style={{color:parseFloat(v)>-10?'var(--color-accent)':'var(--color-danger)'}}>{v>0?'+':''}{v}%</strong></span>
+        {variance !== null && (
+          <div style={{padding:'12px 16px',background:'var(--color-surface)',borderRadius:'8px',fontSize:'13px',display:'flex',gap:'24px',flexWrap:'wrap', border:'1px solid var(--color-border)'}}>
+            <span>Expected: <strong>{expectedYield}</strong></span>
+            <span>Reported: <strong>{ay}</strong></span>
+            <span>Variance: <strong style={{color:parseFloat(variance) > -15 ? 'var(--color-primary)' : 'var(--color-danger)'}}>{variance > 0 ? '+' : ''}{variance}%</strong></span>
           </div>
         )}
-        <button className="btn btn-solid" disabled={!selectedFarm || !ay || !evidence} onClick={()=>addToast('Harvest report submitted!','success', 'Option A Verification step initiated.')}>Submit Report & Evidence</button>
+
+        <button className="btn btn-solid btn-lg" disabled={!selectedFarmId || !ay || !totalSales || !evidence || isSubmitting} onClick={handleSubmit}>
+          {isSubmitting ? 'Submitting...' : 'Submit Harvest Report'}
+        </button>
       </div>
     </div>
   );
@@ -970,17 +1026,62 @@ export default function FarmerDashboard() {
   const fbStart = (farmsPage - 1) * ITEMS_PER_PAGE;
   const { user, logout, fetchProfile } = useAuth();
   const [isKycOpen, setIsKycOpen] = useState(false);
-  
+  const [farms, setFarms] = useState([]);
+  const [loadingFarms, setLoadingFarms] = useState(true);
+  const [banks, setBanks] = useState([]);
+
+  const fetchFarms = async () => {
+    try {
+      const res = await api.get('/farms/my-farms');
+      setFarms(res.data.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingFarms(false);
+    }
+  };
+
+  const fetchBanks = async () => {
+    try {
+      const res = await api.get('/banks');
+      setBanks(res.data.data);
+    } catch (err) {
+      console.error("Failed to load banks");
+    }
+  };
+
   useEffect(() => {
-    fetchProfile();
+    const init = async () => {
+      try {
+        await Promise.allSettled([
+          fetchProfile(),
+          fetchFarms(),
+          fetchBanks()
+        ]);
+      } catch (err) {
+        console.error("Dashboard initialization failed", err);
+      }
+    };
+    init();
   }, []);
 
-  const displayFarms = user?.isNewUser ? [] : mockFarmerFarms;
+  const displayFarms = farms;
   const paginatedFarms = displayFarms.slice(fbStart, fbStart + ITEMS_PER_PAGE);
-  const [payoutDetails, setPayoutDetails] = useState({ accountName: '', bankName: '', accountNumber: '' });
+  const [payoutDetails, setPayoutDetails] = useState({ accountName: '', bankCode: '', accountNumber: '' });
   const [detailsSaved, setDetailsSaved] = useState(false);
   const kycComplete = user?.bvn_verified && user?.bank_verified;
   const navigate = useNavigate();
+
+  const handleSavePayout = async () => {
+    if (!payoutDetails.accountName || !payoutDetails.accountNumber || !payoutDetails.bankCode) return;
+    try {
+      await api.post('/auth/payout-settings', payoutDetails);
+      setDetailsSaved(true);
+      addToast('Payout details saved!', 'success');
+    } catch (err) {
+      addToast(err.response?.data?.message || 'Failed to save payout details', 'error');
+    }
+  };
 
   const navFooter = (
     <>
@@ -1062,23 +1163,42 @@ export default function FarmerDashboard() {
         )}
         {tab==='farms' && (
           <>
-            {user?.bvn_verified && (
-              <div className="card" style={{ padding: '20px 24px', marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, var(--color-primary-light) 0%, #fff 100%)', border: '1px solid var(--color-primary)' }}>
-                <div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-primary)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Your Trust Score</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '32px', fontWeight: 800, color: 'var(--color-primary)' }}>{user?.trust_score || 0}</span>
-                    <span style={{ fontSize: '18px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
-                    <span className="badge badge-active" style={{ marginLeft: '12px', background: 'var(--color-primary)', color: '#fff', padding: '6px 12px' }}>{user?.trust_tier || 'Emerging Farmer'}</span>
+            <div className="card" style={{ padding: '24px', marginBottom: '28px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', overflow: 'hidden', position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: user?.bvn_verified ? 'var(--color-primary)' : 'var(--color-accent)' }}></div>
+              <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>Your Trust Score</h3>
+              
+              {!user?.bvn_verified ? (
+                <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                  <p style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '4px' }}>Complete KYC verification</p>
+                  <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>to receive your score and start listing farms</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '24px', alignItems: 'center' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '36px', fontWeight: 800, color: 'var(--color-primary)', lineHeight: 1 }}>{user?.trust_score || 0}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, marginTop: '4px' }}>/ 100</div>
+                  </div>
+                  
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span className="badge badge-active" style={{ background: 'var(--color-primary)', color: '#fff', fontSize: '11px', fontWeight: 700 }}>
+                        {user?.trust_tier === 'verified' ? 'Verified Farmer' : user?.trust_tier === 'emerging' ? 'Emerging Farmer' : 'Unrated'}
+                      </span>
+                      <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+                        {user?.trust_score >= 80 ? 'Excellent Standing' : 'Growing Trust'}
+                      </span>
+                    </div>
+                    <div className="progress-track" style={{ height: '10px', background: 'var(--color-border)', borderRadius: '5px' }}>
+                      <div className="progress-fill" style={{ width: `${user?.trust_score || 0}%`, background: 'var(--color-primary)', borderRadius: '5px' }}></div>
+                    </div>
+                  </div>
+                  
+                  <div style={{ maxWidth: '200px', fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.4, textAlign: 'right' }}>
+                    Complete more farms to earn additional points. All farmers are BVN-verified.
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', fontSize: '13px', color: 'var(--color-text-secondary)', maxWidth: '240px' }}>
-                  {user?.bank_verified 
-                    ? "🎉 You have full access! Keep completing milestones to grow your score."
-                    : "Add your bank account to reach 'Verified Farmer' status."}
-                </div>
-              </div>
-            )}
+              )}
+            </div>
 
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'28px'}}>
               <h1 style={{fontSize:'26px',fontWeight:700,fontFamily:'var(--font-heading)'}}>My Farms</h1>
@@ -1106,15 +1226,61 @@ export default function FarmerDashboard() {
             {displayFarms.length===0 ? <EmptyState title="No farms yet" description="Create your first farm listing." action={()=>handleTabChange('add')} actionLabel="Add Farm"/> : (
               <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
                 {paginatedFarms.map(farm=>{
-                  const pct=farm.raised?Math.round((farm.raised/farm.goal)*100):0;
-                  const statusBadge = farm.status==='active'?'active':farm.status==='funded'?'pending':farm.status==='deadline_passed'?'pending':['cancelled','rejected'].includes(farm.status)?'danger':'draft';
-                  const statusLabel = farm.status==='deadline_passed'?'Deadline Passed':farm.status.charAt(0).toUpperCase()+farm.status.slice(1);
+                  const pct = farm.total_budget > 0 ? Math.round((farm.amount_raised / farm.total_budget) * 100) : 0;
+                  
+                  let statusBadge = 'draft';
+                  let statusLabel = farm.farm_status;
+                  let showProgress = true;
+                  
+                  switch(farm.farm_status) {
+                    case 'active': 
+                      statusBadge = 'active'; 
+                      statusLabel = 'Active'; 
+                      break;
+                    case 'pending': 
+                      statusBadge = 'pending'; 
+                      statusLabel = 'Under Admin Review'; 
+                      showProgress = false;
+                      break;
+                    case 'draft': 
+                      statusBadge = 'draft'; 
+                      statusLabel = 'Incomplete'; 
+                      showProgress = false;
+                      break;
+                    case 'funded': 
+                      statusBadge = 'active'; 
+                      statusLabel = 'Fully Funded'; 
+                      break;
+                    case 'deadline_passed': 
+                      statusBadge = 'pending'; 
+                      statusLabel = 'Deadline Passed'; 
+                      break;
+                    case 'rejected': 
+                    case 'cancelled': 
+                      statusBadge = 'danger'; 
+                      statusLabel = farm.farm_status.charAt(0).toUpperCase() + farm.farm_status.slice(1);
+                      break;
+                    default: 
+                      statusLabel = farm.farm_status?.charAt(0).toUpperCase() + farm.farm_status?.slice(1);
+                  }
+
                   return (
-                    <div key={farm.id} className="card" style={{padding:'20px 24px',opacity:['cancelled','rejected'].includes(farm.status)?0.7:1}}>
+                    <div key={farm.id} className="card" style={{padding:'20px 24px', opacity:['cancelled','rejected'].includes(farm.farm_status)?0.7:1}}>
                       <div style={{display:'flex',alignItems:'center',gap:'16px',flexWrap:'wrap'}}>
-                        <div style={{flex:1,minWidth:'160px'}}><h3 style={{fontWeight:600,fontSize:'16px'}}>{farm.name}</h3><p style={{fontSize:'13px',color:'var(--color-text-secondary)'}}>{farm.crop}</p></div>
-                        <span className={`badge badge-${statusBadge}`} style={{textTransform:'capitalize'}}>{statusLabel}</span>
-                        {farm.amount_raised>0 && <div style={{display:'flex',alignItems:'center',gap:'10px',minWidth:'180px'}}><div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:`${Math.round((farm.amount_raised/farm.total_budget)*100)}%`}}/></div><span className="text-mono" style={{fontSize:'13px',fontWeight:600}}>{Math.round((farm.amount_raised/farm.total_budget)*100)}%</span></div>}
+                        <div style={{flex:1,minWidth:'160px'}}>
+                          <h3 style={{fontWeight:600,fontSize:'16px'}}>{farm.name}</h3>
+                          <p style={{fontSize:'13px',color:'var(--color-text-secondary)'}}>{farm.crop_name} · {farm.state}</p>
+                        </div>
+                        
+                        <span className={`badge badge-${statusBadge}`}>{statusLabel}</span>
+                        
+                        {showProgress && (
+                           <div style={{display:'flex',alignItems:'center',gap:'10px',minWidth:'180px'}}>
+                             <div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:`${pct}%`}}/></div>
+                             <span className="text-mono" style={{fontSize:'13px',fontWeight:600}}>{pct}%</span>
+                           </div>
+                        )}
+                        
                         <div style={{display:'flex',gap:'8px'}}>
                           <Link to={`/farms/${farm.id}`} className="btn btn-ghost btn-sm">Manage</Link>
                           {!['deadline_passed','cancelled','rejected'].includes(farm.status) && (
@@ -1184,8 +1350,8 @@ export default function FarmerDashboard() {
           </div>
         )}
 
-        {tab==='milestones' && <MilestonesTab/>}
-        {tab==='harvest' && <HarvestTab/>}
+        {tab==='milestones' && <MilestonesTab farms={farms} />}
+        {tab==='harvest' && <HarvestTab farms={farms} />}
 
         {tab==='explore' && (
           <div>
@@ -1283,18 +1449,17 @@ export default function FarmerDashboard() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
                   <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Account Name (Must match BVN)</label><input className="form-input" value={payoutDetails.accountName} onChange={e => setPayoutDetails({...payoutDetails, accountName: e.target.value})} placeholder="e.g. Adewale Farming Co." /></div>
                   <div className="form-group"><label className="form-label">Bank Name</label>
-                    <select className="form-select form-input" value={payoutDetails.bankName} onChange={e => setPayoutDetails({...payoutDetails, bankName: e.target.value})}>
+                    <select className="form-select form-input" value={payoutDetails.bankCode} onChange={e => setPayoutDetails({...payoutDetails, bankCode: e.target.value})}>
                       <option value="">Select Bank...</option>
-                      <option value="GTBank">GTBank</option>
-                      <option value="First Bank">First Bank</option>
-                      <option value="Zenith Bank">Zenith Bank</option>
-                      <option value="Access Bank">Access Bank</option>
+                      {banks.map(b => (
+                        <option key={b.code} value={b.code}>{b.name}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="form-group"><label className="form-label">Account Number</label><input className="form-input text-mono" maxLength={10} value={payoutDetails.accountNumber} onChange={e => setPayoutDetails({...payoutDetails, accountNumber: e.target.value})} placeholder="0123456789" /></div>
                 </div>
                 
-                <button className="btn btn-solid" style={{ width: "100%", marginTop: "16px" }} onClick={() => setDetailsSaved(true)} disabled={detailsSaved || !payoutDetails.accountName || !payoutDetails.accountNumber}>Save Payout Details</button>
+                <button className="btn btn-solid" style={{ width: "100%", marginTop: "16px" }} onClick={handleSavePayout} disabled={detailsSaved || !payoutDetails.accountName || !payoutDetails.accountNumber || !payoutDetails.bankCode}>Save Payout Details</button>
               </div>
             </div>
           </div>

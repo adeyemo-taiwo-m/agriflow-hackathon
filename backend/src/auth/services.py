@@ -334,6 +334,41 @@ class AuthServices():
                 "trust_score":    current_user.trust_score,
                 "trust_tier":     current_user.trust_tier,
                 "is_active":      current_user.is_active,
-                "created_at":     current_user.created_at
+                "created_at":     current_user.created_at,
+                "bank_account_number": current_user.account_number,
+                "bank_code":           current_user.bank_code,
+                "bank_account_name":   current_user.account_name
+            }
+        }
+
+    async def update_payout_settings(self, user_input, user_uid: uuid.UUID, session: AsyncSession):
+        statement = select(User).where(User.uid == user_uid)
+        result = await session.exec(statement)
+        user = result.first()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user.account_name = user_input.accountName
+        user.bank_code = user_input.bankCode
+        user.account_number = user_input.accountNumber
+        user.bank_verified = False # Require re-verification if details change
+        
+        session.add(user)
+        try:
+            await session.commit()
+            await session.refresh(user)
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Failed to update payout settings: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to update settings")
+            
+        return {
+            "success": True,
+            "message": "Payout settings updated",
+            "data": {
+                "account_name": user.account_name,
+                "bank_code": user.bank_code,
+                "account_number": user.account_number
             }
         }

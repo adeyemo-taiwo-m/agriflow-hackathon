@@ -59,3 +59,16 @@ async def list_investments(
         "message": "Investments retrieved successfully",
         "data": result
     }
+@investment_router.get("/payouts/expected", status_code=status.HTTP_200_OK)
+async def list_expected_payouts(
+    investor = Depends(get_current_investor),
+    session: AsyncSession = Depends(get_session),
+    investment_services: InvestmentServices = Depends(get_investment_services)
+):
+    """Lists all expected payouts for the current investor with progress steps."""
+    result = await investment_services.get_expected_payouts(investor, session)
+    return {
+        "success": True,
+        "message": "Expected payouts retrieved successfully",
+        "data": result
+    }

@@ -1,12 +1,8 @@
 import { useState, useEffect } from "react";
-import { mockAllPayouts } from "../data/mockData";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import KYCModal from "../components/KYCModal";
-import {
-  mockInvestorPortfolio,
-  mockExpectedPayoutsExpanded,
-} from "../data/mockData";
+import api from "../utils/api";
 import EmptyState from "../components/EmptyState";
 import DashboardLayout from "../components/DashboardLayout";
 import Pagination from "../components/Pagination";
@@ -44,15 +40,59 @@ export default function InvestorDashboard() {
   const [payoutsViewMode, setPayoutsViewMode] = useState("timeline");
   const [payoutDetails, setPayoutDetails] = useState({
     accountName: "",
-    bankName: "",
+    bankCode: "",
     accountNumber: "",
   });
   const [detailsSaved, setDetailsSaved] = useState(false);
+
+  const handleSavePayout = async () => {
+    if (!payoutDetails.accountName || !payoutDetails.accountNumber || !payoutDetails.bankCode) return;
+    try {
+      await api.post('/auth/payout-settings', payoutDetails);
+      setDetailsSaved(true);
+      await fetchProfile();
+    } catch (err) {
+      console.error('Failed to save payout details', err);
+    }
+  };
   const { user, logout, fetchProfile } = useAuth();
   const [isKycOpen, setIsKycOpen] = useState(false);
   
+  const [investments, setInvestments] = useState([]);
+  const [expectedPayouts, setExpectedPayouts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [banks, setBanks] = useState([]);
+
+  const initData = async () => {
+    try {
+      const [invRes, payRes, bankRes] = await Promise.all([
+        api.get("/investments"),
+        api.get("/investments/payouts/expected"),
+        api.get("/banks")
+      ]);
+      setInvestments(invRes.data.data);
+      setExpectedPayouts(payRes.data.data);
+      setBanks(bankRes.data.data || []);
+      
+      // Update local payout details from user object if available
+      if (user?.bank_account_number) {
+        setPayoutDetails({
+          accountName: user.bank_account_name || "",
+          bankCode: user.bank_code || "",
+          accountNumber: user.bank_account_number || "",
+        });
+        setDetailsSaved(true);
+      }
+    } catch (err) {
+      console.error("Failed to fetch dashboard data", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchProfile();
+    initData();
   }, []);
 
   const kycComplete = user?.bvn_verified && user?.bank_verified;
@@ -62,9 +102,9 @@ export default function InvestorDashboard() {
   useEffect(() => setPayoutsPage(1), [payoutsViewMode]);
 
   const pbStart = (payoutsPage - 1) * ITEMS_PER_PAGE;
-  const displayPortfolio = user?.isNewUser ? [] : mockInvestorPortfolio;
-  const displayPayouts = user?.isNewUser ? [] : mockExpectedPayoutsExpanded;
-  const displayAllPayouts = user?.isNewUser ? [] : mockAllPayouts;
+  const displayPortfolio = investments;
+  const displayPayouts = expectedPayouts;
+  const displayAllPayouts = expectedPayouts.filter(p => p.statusStep === 5);
   const paginatedPayouts = displayPayouts.slice(
     pbStart,
     pbStart + ITEMS_PER_PAGE,
@@ -99,7 +139,7 @@ export default function InvestorDashboard() {
       return s + (total || 0);
     }, 0);
   const activeFarms = displayPortfolio.filter(
-    (i) => i.status === "active",
+    (i) => i.status === "confirmed",
   ).length;
 
   const totalExpectedDisplay = user?.isNewUser ? 0 : 226000;
@@ -132,6 +172,13 @@ export default function InvestorDashboard() {
   );
 
   console.log(user);
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Morning";
+    if (hour < 17) return "Afternoon";
+    return "Evening";
+  };
+  
   return (
     <>
     <DashboardLayout
@@ -810,14 +857,15 @@ export default function InvestorDashboard() {
                             details. Please update your settings.
                           </span>
                         )}
+                        {ep.statusStep === 1 && "Investment confirmed — awaiting farm milestones."}
                         {ep.statusStep === 2 &&
-                          "3 of 5 milestones verified — harvest expected June 2026"}
+                          "All farm milestones verified — harvest expected by " + new Date(ep.expectedDate).toLocaleDateString()}
                         {ep.statusStep === 3 &&
-                          "Harvest collected: 4.2 tons — processing for sales"}
+                          "Harvest collected and verified — processing returns."}
                         {ep.statusStep === 4 &&
-                          "Proceeds processing — transfer initiated to your account"}
+                          "Proceeds confirmed — payout initiated to your account."}
                         {ep.statusStep === 5 &&
-                          `Paid on 14 Mar 2026 — ₦${(ep.expected * ep.invested_amount + ep.invested_amount).toLocaleString()} to GTBank ···6789`}
+                          `Paid on ${new Date(ep.expectedDate).toLocaleDateString()} — ₦${ep.expected.toLocaleString()}`}
                         {ep.dateStatus === "overdue" && (
                           <span
                             style={{
@@ -848,9 +896,6 @@ export default function InvestorDashboard() {
                     <div style={{ display: "flex", gap: "16px" }}>
                       <Link to={`/farms/${ep.farmId}`} className="btn-link">
                         View Farm
-                      </Link>
-                      <Link to={`/investments/${ep.id}`} className="btn-link">
-                        View Investment
                       </Link>
                     </div>
                   </div>
@@ -891,7 +936,7 @@ export default function InvestorDashboard() {
                         <span className="badge badge-active">{ep.crop}</span>
                       </td>
                       <td className="text-mono">
-                        ₦{ep.invested_amount.toLocaleString()}
+                        ₦{ep.investedAmount.toLocaleString()}
                       </td>
                       <td
                         className="text-mono"
@@ -900,10 +945,10 @@ export default function InvestorDashboard() {
                           fontWeight: 600,
                         }}
                       >
-                        ₦{(ep.expected * ep.invested_amount + ep.invested_amount).toLocaleString()}
+                        ₦{ep.expected.toLocaleString()}
                       </td>
                       <td style={{ textTransform: "capitalize" }}>
-                        {ep.return_type}
+                        Fixed ROI
                       </td>
                       <td
                         style={{

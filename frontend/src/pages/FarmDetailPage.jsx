@@ -53,61 +53,74 @@ function MilestoneTimeline({ milestones }) {
   const [expanded, setExpanded] = useState({});
   const toggle = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
 
-  const statusColor = { verified: 'var(--color-primary)', in_progress: 'var(--color-accent)', pending: '#ccc' };
-  const proofStatusLabel = { approved: 'Verified by AgriFlow', pending: 'Awaiting admin review', rejected: 'Rejected' };
+  const statusMap = {
+    locked: { color: 'var(--color-text-muted)', label: 'Locked', dot: '#ccc' },
+    pending_proof: { color: 'var(--color-accent)', label: 'Awaiting Proof', dot: 'var(--color-accent)' },
+    under_review: { color: '#f59e0b', label: 'Under Review', dot: '#f59e0b' },
+    verified: { color: 'var(--color-primary)', label: 'Verified', dot: 'var(--color-primary)' },
+    disbursed: { color: 'var(--color-primary-dark)', label: 'Funded', dot: 'var(--color-primary-dark)' },
+    rejected: { color: 'var(--color-danger)', label: 'Rejected', dot: 'var(--color-danger)' }
+  };
 
   return (
     <div className="timeline">
-      {milestones.map((m, i) => (
-        <div key={m.id} className="timeline-item">
-          <div className="timeline-left">
-            <div className="timeline-dot" style={{ background: statusColor[m.status], borderColor: statusColor[m.status], boxShadow: m.status === 'in_progress' ? `0 0 0 4px var(--color-accent-light)` : 'none' }} />
-            {i < milestones.length - 1 && <div className="timeline-line" style={{ background: m.status === 'verified' ? 'var(--color-primary)' : 'var(--color-border)' }} />}
-          </div>
-          <div className="timeline-card card">
-            <div className="timeline-card-top">
-              <div>
-                <h4 className="timeline-name">{m.name}</h4>
-                <span className="timeline-date">Due {new Date(m.dueDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+      {milestones.map((m, i) => {
+        const stage = statusMap[m.status] || { color: '#ccc', label: m.status, dot: '#ccc' };
+        return (
+          <div key={m.id} className="timeline-item">
+            <div className="timeline-left">
+              <div className="timeline-dot" style={{ 
+                background: m.status === 'locked' ? '#fff' : stage.dot, 
+                borderColor: stage.dot, 
+                boxShadow: m.status === 'under_review' ? `0 0 0 4px rgba(245, 158, 11, 0.15)` : 'none' 
+              }} />
+              {i < milestones.length - 1 && <div className="timeline-line" style={{ background: ['verified', 'disbursed'].includes(m.status) ? 'var(--color-primary)' : 'var(--color-border)' }} />}
+            </div>
+            <div className="timeline-card card">
+              <div className="timeline-card-top">
+                <div>
+                  <h4 className="timeline-name">{m.name}</h4>
+                  <span className="timeline-date">Stage {m.order_number || i + 1} · Week {m.expected_week}</span>
+                </div>
+                <span className={`badge`} style={{ 
+                  background: m.status === 'locked' ? 'var(--color-card-alt)' : stage.color, 
+                  color: m.status === 'locked' ? 'var(--color-text-secondary)' : '#fff',
+                  textTransform: 'capitalize'
+                }}>
+                  {stage.label}
+                </span>
               </div>
-              <span className={`badge badge-${m.status === 'verified' ? 'active' : m.status === 'in_progress' ? 'pending' : 'draft'}`}>
-                {m.status === 'verified' ? 'Verified' : m.status === 'in_progress' ? 'In Progress' : 'Pending'}
-              </span>
-            </div>
-            <div className="timeline-amounts">
-              <span>Budget: <strong className="text-mono">₦{m.budgetAllocated.toLocaleString()}</strong></span>
-              <span>Released: <strong className="text-mono" style={{ color: m.released ? 'var(--color-primary)' : 'var(--color-accent)' }}>
-                {m.released ? `₦${m.released.toLocaleString()}` : 'Pending release'}
-              </strong></span>
-            </div>
+              <div className="timeline-amounts">
+                <span>Budget Allocation: <strong className="text-mono">₦{(m.amount || 0).toLocaleString()}</strong></span>
+                {m.status === 'disbursed' && <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>✓ Disbursed</span>}
+              </div>
 
-            {m.proofs.length > 0 && (
-              <div className="proof-section">
-                <button className="proof-toggle" onClick={() => toggle(m.id)}>
-                  {m.proofs.length} verification proof{m.proofs.length > 1 ? 's' : ''} — {expanded[m.id] ? 'collapse ▲' : 'tap to view ▼'}
-                </button>
-                {expanded[m.id] && (
-                  <div className="proof-list">
-                    {m.proofs.map(p => (
-                      <div key={p.id} className="proof-item">
-                        <img src={p.url} alt="Proof" className="proof-thumb" />
-                        <div className="proof-meta">
-                          <span className="proof-submitted">Farmer submitted · {new Date(p.uploadDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}</span>
-                          <div className={`proof-status${p.status === 'approved' ? ' approved' : p.status === 'rejected' ? ' rejected' : ''}`}>
-                            {p.status === 'approved' && '✓ '}
-                            {proofStatusLabel[p.status]}
+              {m.proofs && m.proofs.length > 0 && (
+                <div className="proof-section">
+                  <button className="proof-toggle" onClick={() => toggle(m.id)}>
+                    {m.proofs.length} verification proof{m.proofs.length > 1 ? 's' : ''} — {expanded[m.id] ? 'collapse ▲' : 'tap to view ▼'}
+                  </button>
+                  {expanded[m.id] && (
+                    <div className="proof-list">
+                      {m.proofs.map(p => (
+                        <div key={p.id} className="proof-item">
+                          <img src={p.photo_url || p.url} alt="Proof" className="proof-thumb" />
+                          <div className="proof-meta">
+                            <span className="proof-submitted">Submitted · {new Date(p.submitted_at || p.uploadDate).toLocaleDateString()}</span>
+                            <div className={`proof-status ${p.status}`}>
+                               {p.status === 'verified' ? '✓ Verified by Admin' : 'Awaiting Review'}
+                            </div>
                           </div>
-                          {p.adminNote && <div className="proof-admin-note">{p.adminNote}</div>}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -151,31 +164,95 @@ function BudgetChart({ stages, total }) {
 // ─── INVESTMENT MODAL ────────────────────────────────────────
 function InvestmentModal({ farm, isOpen, onClose }) {
   const [amount, setAmount] = useState('');
-  const divType = 'cash';
   const [step, setStep] = useState(1);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState(null);
   const { addToast } = useToast();
   const navigate = useNavigate();
 
   const numericAmount = amount ? parseFloat(amount) : 0;
   const minInvestment = farm?.min_investment || 5000;
   const returnRate = farm?.return_rate ? (farm.return_rate * 100).toFixed(0) : '—';
-  const totalReturn = numericAmount ? (numericAmount * (1 + farm.return_rate)) : 0;
+  const totalReturn = numericAmount ? (numericAmount * (1 + (farm.return_rate || 0))) : 0;
   const profitEstimate = totalReturn - numericAmount;
-  const cashReturn = numericAmount ? totalReturn.toFixed(0) : null;
   const canProceed = numericAmount && numericAmount >= minInvestment;
 
-  const handleProceed = () => {
-    setStep(2);
-    setTimeout(() => {
-      onClose();
-      navigate('/payment/success', { state: { farm: farm.name, amount: numericAmount, divType, estimatedReturn: Math.round(totalReturn), estimatedProfit: Math.round(profitEstimate) } });
-    }, 2000);
+  const handleProceed = async () => {
+    try {
+      setError(null);
+      setStep(2); // Connecting to gateway state
+      
+      const res = await api.post('/investments/initiate', {
+        farm_id: farm.id,
+        amount: numericAmount
+      });
+      
+      if (res.data.success) {
+        const { txn_ref, amount_kobo, merchant_code, payment_item_id, customer_email, customer_name } = res.data.data;
+        
+        const params = {
+          merchant_code,
+          pay_item_id: payment_item_id,
+          txn_ref,
+          amount: amount_kobo,
+          currency: 566,
+          cust_name: customer_name,
+          cust_email: customer_email,
+          mode: 'TEST',
+          site_redirect_url: window.location.origin,
+          onComplete: (onCompleteResponse) => {
+            handleVerify(txn_ref);
+          }
+        };
+
+        if (window.webpayCheckout) {
+          window.webpayCheckout(params);
+        } else {
+          setError("Payment gateway library failed to load. Please refresh the page.");
+          setStep(1);
+          addToast("WebPay library not found", "error");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || err.message || "Failed to initiate payment");
+      setStep(1);
+      addToast("Failed to initiate investment", "error");
+    }
+  };
+
+  const handleVerify = async (txn_ref) => {
+    setVerifying(true);
+    setStep(3); // Verifying status
+    try {
+      const res = await api.post('/investments/verify', { txn_ref });
+      const { status, failure_reason } = res.data.data;
+      
+      if (status === 'confirmed') {
+        addToast("Investment successful!", "success");
+        onClose();
+        navigate('/investor/dashboard?tab=investments');
+      } else if (status === 'failed') {
+        setError(failure_reason || "Payment failed at Interswitch");
+        setStep(1);
+      } else {
+        // Still pending
+        setError("Payment is still processing. Check your dashboard in a few minutes.");
+        setStep(1);
+      }
+    } catch (err) {
+       setError("Verification timed out. We will confirm your payment soon.");
+       setStep(1);
+    } finally {
+      setVerifying(false);
+    }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Invest in ${farm.name}`} width={520}>
-      {step === 1 ? (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Invest in ${farm?.name}`} width={520} persistent={step > 1}>
+      {step === 1 && (
         <div className="invest-form">
+          {error && <div style={{ padding:'12px', background:'rgba(181,74,47,0.06)', borderLeft:'3px solid var(--color-danger)', borderRadius:'4px', color:'var(--color-danger)', fontSize:'13px', marginBottom:'10px' }}>{error}</div>}
           <div className="invest-amount-wrap">
             <span className="invest-currency">₦</span>
             <CurrencyInput
@@ -185,32 +262,40 @@ function InvestmentModal({ farm, isOpen, onClose }) {
               onChange={e => setAmount(e.target.value)}
             />
           </div>
-          <p className="invest-min">Minimum: ₦{minInvestment.toLocaleString()}</p>
+          <p className="invest-min">Minimum Investment: ₦{(farm?.min_investment || 5000).toLocaleString()}</p>
 
           <div className="invest-div-cards" style={{ gridTemplateColumns: '1fr' }}>
             <div className="invest-div-card selected" style={{ cursor: 'default', borderColor: 'var(--color-primary)' }}>
               <div className="invest-div-icon">💵</div>
               <span className="invest-div-label">Cash Return</span>
-              {cashReturn && (
+              {numericAmount >= minInvestment && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <span className="invest-estimate text-mono">Initial: ₦{numericAmount.toLocaleString()}</span>
-                  <span className="invest-estimate text-mono">Estimated Return: ₦{Math.round(totalReturn).toLocaleString()} (+{returnRate}% uplift)</span>
-                  <span className="invest-estimate text-mono" style={{ color: 'var(--color-primary)' }}>Estimated Profit: ₦{Math.round(profitEstimate).toLocaleString()}</span>
+                  <span className="invest-estimate text-mono">Estimated Return: ₦{Math.round(totalReturn).toLocaleString()} (+{returnRate}% ROI)</span>
+                  <span className="invest-estimate text-mono" style={{ color: 'var(--color-primary)' }}>Expected Profit: ₦{Math.round(profitEstimate).toLocaleString()}</span>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="review-row-mini"><span>Minimum Investment</span><strong>₦{(farm.min_investment||0).toLocaleString()}</strong></div>
-          <div className="review-row-mini"><span>Total Budget</span><strong>₦{(farm.total_budget||0).toLocaleString()}</strong></div>
           <button className="btn btn-solid btn-full btn-lg" disabled={!canProceed} onClick={handleProceed} style={{ marginTop: '8px' }}>
             Proceed to Payment
           </button>
         </div>
-      ) : (
+      )}
+
+      {step === 2 && (
         <div className="invest-loading">
           <div className="invest-spinner" />
           <p>Connecting to payment gateway…</p>
+          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Please complete the payment in the pop-up window.</span>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="invest-loading">
+          <div className="invest-spinner" />
+          <h3 style={{ marginBottom: '8px' }}>Verifying Payment</h3>
+          <p style={{ color: 'var(--color-text-secondary)' }}>Talking to Interswitch nodes to confirm and secure your investment…</p>
         </div>
       )}
 
@@ -228,7 +313,7 @@ function InvestmentModal({ farm, isOpen, onClose }) {
         .invest-div-icon { font-size: 28px; }
         .invest-div-label { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
         .invest-estimate { font-size: 12px; color: var(--color-primary); }
-        .invest-loading { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px; }
+        .invest-loading { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px; text-align: center; }
         .invest-spinner { width: 40px; height: 40px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
@@ -301,7 +386,11 @@ export default function FarmDetailPage() {
     }
 
     f.location = f.location || { state: f.state || 'N/A', lga: f.lga || 'N/A' };
-    f.photos = f.full_display_picture_url || f.listing_display_picture_url || f.photos || ['/placeholder-farm.jpg'];
+    
+    // Prioritize full_display_picture_url for the gallery
+    const backendPhotos = (f.full_display_picture_url && f.full_display_picture_url.length > 0) ? f.full_display_picture_url : f.listing_display_picture_url;
+    f.photos = (backendPhotos && backendPhotos.length > 0) ? backendPhotos : (f.photos || ['/placeholder-farm.jpg']);
+    
     f.transparencyScore = f.transparencyScore || { budgetDisclosed: true, proofsUploaded: !!(f.milestones?.some(m => m.proofs?.length)), adminVerified: f.farm_status === 'active' || f.farm_status === 'funded', yieldReported: false };
     
     if (!f.budget) {
@@ -411,12 +500,13 @@ export default function FarmDetailPage() {
   const investorPool = grossProceeds * 0.40;
   const platformFee = grossProceeds * 0.20;
 
-  const getTrustBadge = (score) => {
-    if (score >= 75) return { label: '✓ Verified Farmer', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
-    if (score >= 50) return { label: '◑ Emerging Farmer', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' };
-    return { label: '○ Unrated', color: 'var(--color-text-secondary)', bg: 'var(--color-card-alt)' };
+  const getTrustBadge = (tier) => {
+    const t = (tier || 'unrated').toLowerCase();
+    if (t === 'verified') return { label: 'Verified Farmer', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
+    if (t === 'emerging') return { label: 'Emerging Farmer', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' };
+    return { label: 'Unrated', color: 'var(--color-text-secondary)', bg: 'var(--color-card-alt)' };
   };
-  const tb = getTrustBadge(farm.farmer.trustScore || 0);
+  const tb = getTrustBadge(farm.farmer.trustTier || 'unrated');
   const trustBadgeEl = (
     <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 8px', borderRadius: '4px', color: tb.color, background: tb.bg, letterSpacing: '0.2px', display: 'flex', alignItems: 'center' }}>
       {tb.label}
@@ -561,6 +651,17 @@ export default function FarmDetailPage() {
                     {trustBadgeEl}
                   </div>
                   <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>{farm.farmer.state} · Member since {farm.farmer.memberSince} · {farm.farmer.totalFarms} farm{farm.farmer.totalFarms > 1 ? 's' : ''}</p>
+                  
+                  <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--color-card-alt)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Farmer Trust Score</span>
+                        <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--color-primary)' }}>{farm.farmer.trustScore || 0}/100</span>
+                     </div>
+                     <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+                        "AgriFlow's trust score combines BVN identity verification, credit history, and bank account verification. A higher score means a stronger financial track record. All farmers on AgriFlow are BVN-verified."
+                     </p>
+                  </div>
+
                   <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>{farm.farmer.bio}</p>
                 </div>
               </div>
@@ -704,16 +805,20 @@ export default function FarmDetailPage() {
               ) : (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '12px' }}>
-                    {user && isInvestor && !kycComplete ? (
-                      <button className="btn btn-solid btn-lg" onClick={() => navigate('/investor/dashboard?tab=settings')} style={{ background: 'var(--color-accent)', border: 'none' }}>
-                        Verify KYC to Invest
+                    {!user ? (
+                      <button className="btn btn-solid btn-lg" onClick={() => navigate('/auth?tab=login', { state: { from: `/farms/${id}` } })}>
+                        Invest Now
+                      </button>
+                    ) : (isInvestor && !kycComplete) ? (
+                      <button className="btn btn-solid btn-lg" 
+                        onClick={() => navigate('/investor/dashboard?tab=settings')} 
+                        style={{ background: '#f59e0b', border: 'none' }}
+                      >
+                        Complete your KYC to invest
                       </button>
                     ) : (
-                      <button className="btn btn-solid btn-lg" onClick={() => {
-                        if (!user) navigate('/auth?tab=login');
-                        else setInvestOpen(true);
-                      }} disabled={farm.status === 'funded' || farm.daysLeft === 0}>
-                        {farm.status === 'funded' ? 'Fully Funded' : isInvested ? 'Invest More' : 'Invest Here'}
+                      <button className="btn btn-solid btn-lg" onClick={() => setInvestOpen(true)} disabled={farm.status === 'funded' || farm.daysLeft === 0}>
+                        {farm.status === 'funded' ? 'Fully Funded' : isInvested ? 'Invest More' : 'Invest Now'}
                       </button>
                     )}
                     <button className="btn btn-ghost btn-lg">Save Farm</button>

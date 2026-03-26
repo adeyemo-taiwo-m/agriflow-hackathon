@@ -17,19 +17,58 @@ class AdminServices:
 
     async def get_pending_farms(self, session: AsyncSession) -> List[dict]:
         """Retrieves all farms awaiting approval, sorted by oldest first."""
+        logger.info("AdminServices: Fetching pending farms...")
         statement = select(Farm).where(Farm.farm_status == FarmStatus.PENDING).order_by(Farm.created_at.asc()).options(
             selectinload(Farm.owner),
             selectinload(Farm.milestones).selectinload(Milestone.proofs)
         )
         result = await session.exec(statement)
         farms = result.all()
+        logger.info(f"AdminServices: Found {len(farms)} pending farms.")
         
+        # Explicitly map to avoid recursion errors during automatic model dumping
         return [
             {
-                **farm.model_dump(),
+                "id": farm.id,
+                "name": farm.name,
+                "crop_name": farm.crop_name,
+                "state": farm.state,
+                "lga": farm.lga,
+                "farm_size_ha": farm.farm_size_ha,
+                "description": farm.description,
+                "total_budget": farm.total_budget,
+                "amount_raised": farm.amount_raised,
+                "expected_yield": farm.expected_yield,
+                "sale_price_per_unit": farm.sale_price_per_unit,
+                "return_rate": farm.return_rate,
+                "start_date": farm.start_date,
+                "harvest_date": farm.harvest_date,
                 "status": farm.farm_status,
-                "farmer": farm.owner, 
-                "milestones": farm.milestones 
+                "latitude": farm.latitude,
+                "longitude": farm.longitude,
+                "location_photo_url": farm.location_photo_url,
+                "listing_display_picture_url": farm.listing_display_picture_url,
+                "full_display_picture_url": farm.full_display_picture_url,
+                "farmer": {
+                    "uid": farm.owner.uid,
+                    "full_name": farm.owner.full_name,
+                    "email": farm.owner.email,
+                    "trust_tier": farm.owner.trust_tier,
+                    "trust_score": farm.owner.trust_score
+                } if farm.owner else None,
+                "milestones": [
+                    {
+                        "id": m.id,
+                        "name": m.name,
+                        "description": m.description,
+                        "order_number": m.order_number,
+                        "expected_week": m.expected_week,
+                        "amount": m.amount,
+                        "status": m.status,
+                        "proof_photo_url": m.proof_photo_url
+                    } for m in farm.milestones
+                ],
+                "created_at": farm.created_at
             } for farm in farms
         ]
 
@@ -64,10 +103,46 @@ class AdminServices:
         result = await session.exec(statement)
         farm = result.one()
         return {
-            **farm.model_dump(),
+            "id": farm.id,
+            "name": farm.name,
+            "crop_name": farm.crop_name,
+            "state": farm.state,
+            "lga": farm.lga,
+            "farm_size_ha": farm.farm_size_ha,
+            "description": farm.description,
+            "total_budget": farm.total_budget,
+            "amount_raised": farm.amount_raised,
+            "expected_yield": farm.expected_yield,
+            "sale_price_per_unit": farm.sale_price_per_unit,
+            "return_rate": farm.return_rate,
+            "start_date": farm.start_date,
+            "harvest_date": farm.harvest_date,
             "status": farm.farm_status,
-            "farmer": farm.owner,
-            "milestones": farm.milestones
+            "latitude": farm.latitude,
+            "longitude": farm.longitude,
+            "location_photo_url": farm.location_photo_url,
+            "listing_display_picture_url": farm.listing_display_picture_url,
+            "full_display_picture_url": farm.full_display_picture_url,
+            "farmer": {
+                "uid": farm.owner.uid,
+                "full_name": farm.owner.full_name,
+                "email": farm.owner.email,
+                "trust_tier": farm.owner.trust_tier,
+                "trust_score": farm.owner.trust_score
+            } if farm.owner else None,
+            "milestones": [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "description": m.description,
+                    "order_number": m.order_number,
+                    "expected_week": m.expected_week,
+                    "amount": m.amount,
+                    "status": m.status,
+                    "proof_photo_url": m.proof_photo_url
+                } for m in farm.milestones
+            ],
+            "created_at": farm.created_at
         }
 
     async def reject_farm(self, farm_id: uuid.UUID, reason: str, session: AsyncSession) -> dict:
@@ -90,10 +165,47 @@ class AdminServices:
         result = await session.exec(statement)
         farm = result.one()
         return {
-            **farm.model_dump(),
+            "id": farm.id,
+            "name": farm.name,
+            "crop_name": farm.crop_name,
+            "state": farm.state,
+            "lga": farm.lga,
+            "farm_size_ha": farm.farm_size_ha,
+            "description": farm.description,
+            "total_budget": farm.total_budget,
+            "amount_raised": farm.amount_raised,
+            "expected_yield": farm.expected_yield,
+            "sale_price_per_unit": farm.sale_price_per_unit,
+            "return_rate": farm.return_rate,
+            "start_date": farm.start_date,
+            "harvest_date": farm.harvest_date,
             "status": farm.farm_status,
-            "farmer": farm.owner,
-            "milestones": farm.milestones
+            "latitude": farm.latitude,
+            "longitude": farm.longitude,
+            "location_photo_url": farm.location_photo_url,
+            "listing_display_picture_url": farm.listing_display_picture_url,
+            "full_display_picture_url": farm.full_display_picture_url,
+            "rejection_reason": farm.rejection_reason,
+            "farmer": {
+                "uid": farm.owner.uid,
+                "full_name": farm.owner.full_name,
+                "email": farm.owner.email,
+                "trust_tier": farm.owner.trust_tier,
+                "trust_score": farm.owner.trust_score
+            } if farm.owner else None,
+            "milestones": [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "description": m.description,
+                    "order_number": m.order_number,
+                    "expected_week": m.expected_week,
+                    "amount": m.amount,
+                    "status": m.status,
+                    "proof_photo_url": m.proof_photo_url
+                } for m in farm.milestones
+            ],
+            "created_at": farm.created_at
         }
 
     async def get_stats(self, session: AsyncSession) -> dict:
@@ -141,7 +253,6 @@ class AdminServices:
         ).order_by(Milestone.order_number.asc())
         result = await session.exec(statement)
         milestones = result.all()
-        
         pending_list = []
         for m in milestones:
             # Force refresh the proofs relationship to avoid stale data in session
@@ -278,16 +389,109 @@ class AdminServices:
 
         return [
             {
-                **user.model_dump(),
+                "uid": user.uid,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "full_name": user.full_name,
+                "email": user.email,
+                "role": user.role,
+                "bvn_verified": user.bvn_verified,
+                "bank_verified": user.bank_verified,
+                "trust_tier": user.trust_tier,
+                "trust_score": user.trust_score,
+                "is_active": user.is_active,
+                "created_at": user.created_at,
                 "farm_count": farm_counts.get(user.uid, 0),
             }
             for user in users
         ]
 
+    async def get_all_farms(self, session: AsyncSession) -> List[dict]:
+        """Retrieves all farms in the system, sorted by newest first."""
+        statement = select(Farm).order_by(Farm.created_at.desc()).options(
+            selectinload(Farm.owner),
+            selectinload(Farm.milestones).selectinload(Milestone.proofs)
+        )
+        result = await session.exec(statement)
+        farms = result.all()
+        
+        return [
+            {
+                "id": farm.id,
+                "name": farm.name,
+                "crop_name": farm.crop_name,
+                "state": farm.state,
+                "lga": farm.lga,
+                "farm_size_ha": farm.farm_size_ha,
+                "description": farm.description,
+                "total_budget": farm.total_budget,
+                "amount_raised": farm.amount_raised,
+                "expected_yield": farm.expected_yield,
+                "sale_price_per_unit": farm.sale_price_per_unit,
+                "return_rate": farm.return_rate,
+                "start_date": farm.start_date,
+                "harvest_date": farm.harvest_date,
+                "status": farm.farm_status,
+                "latitude": farm.latitude,
+                "longitude": farm.longitude,
+                "location_photo_url": farm.location_photo_url,
+                "listing_display_picture_url": farm.listing_display_picture_url,
+                "full_display_picture_url": farm.full_display_picture_url,
+                "farmer": {
+                    "uid": farm.owner.uid,
+                    "full_name": farm.owner.full_name,
+                    "email": farm.owner.email,
+                    "trust_tier": farm.owner.trust_tier,
+                    "trust_score": farm.owner.trust_score
+                } if farm.owner else None,
+                "milestones": [
+                    {
+                        "id": m.id,
+                        "name": m.name,
+                        "description": m.description,
+                        "order_number": m.order_number,
+                        "expected_week": m.expected_week,
+                        "amount": m.amount,
+                        "status": m.status,
+                        "proof_photo_url": m.proof_photo_url
+                    } for m in farm.milestones
+                ],
+                "created_at": farm.created_at
+            } for farm in farms
+        ]
+
+    async def get_farm_payouts(self, farm_id: uuid.UUID, session: AsyncSession) -> List[dict]:
+        """Retrieves all generated payouts for a specific farm."""
+        statement = select(Payout).where(Payout.farm_id == farm_id).order_by(Payout.created_at.desc())
+        result = await session.exec(statement)
+        payouts = result.all()
+        
+        # Get recipients details
+        user_ids = [p.recipient_id for p in payouts]
+        users_stmt = select(User).where(User.uid.in_(user_ids))
+        users_result = await session.exec(users_stmt)
+        users_map = {u.uid: u for u in users_result.all()}
+        
+        data = []
+        for p in payouts:
+            user = users_map.get(p.recipient_id)
+            data.append({
+                "id": str(p.id),
+                "investorName": user.full_name if user else "Unknown",
+                "email": user.email if user else "N/A",
+                "amountInvested": p.principal_kobo / 100,
+                "profit": p.profit_kobo / 100,
+                "totalToSend": p.total_amount_kobo / 100,
+                "status": p.status,
+                "recipient_type": p.recipient_type,
+                "bankDetails": f"{user.account_number} ({user.bank_code})" if user and user.account_number else "N/A"
+            })
+        return data
+
+
 
 from src.harvest.models import HarvestReport, HarvestReportStatus
 from src.payouts.models import Payout, PayoutStatus, RecipientType
-from src.utils.logger import logger
 from datetime import datetime
 
 class AdminFinancialServices:

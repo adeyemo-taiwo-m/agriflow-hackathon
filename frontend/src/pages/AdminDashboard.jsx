@@ -246,6 +246,7 @@ export default function AdminDashboard() {
   
   const [stats, setStats] = useState(mockAdminStats);
   const [pendingFarms, setPendingFarms] = useState([]);
+  const [allFarms, setAllFarms] = useState([]);
   const [proofs, setProofs] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -267,9 +268,22 @@ export default function AdminDashboard() {
   const fetchPendingFarms = async () => {
     try {
       const res = await api.get('/admin/farms/pending');
-      if (res.data.success) setPendingFarms(res.data.data);
+      if (res.data.success) {
+        setPendingFarms(res.data.data);
+      }
     } catch (err) {
       console.error("Pending farms fetch failed:", err);
+      // Fallback to empty list or mock if server is unreachable
+      setPendingFarms([]);
+    }
+  };
+
+  const fetchAllFarms = async () => {
+    try {
+      const res = await api.get('/admin/farms');
+      if (res.data.success) setAllFarms(res.data.data);
+    } catch (err) {
+      console.error("All farms fetch failed:", err);
     }
   };
 
@@ -293,7 +307,7 @@ export default function AdminDashboard() {
 
   const initData = async () => {
     setLoading(true);
-    await Promise.all([fetchStats(), fetchPendingFarms(), fetchPendingProofs(), fetchUsers()]);
+    await Promise.all([fetchStats(), fetchPendingFarms(), fetchPendingProofs(), fetchUsers(), fetchAllFarms()]);
     setLoading(false);
   };
 
@@ -368,10 +382,35 @@ export default function AdminDashboard() {
   const [searchUsers, setSearchUsers] = useState('');
   
   // Payout states
-  const [selectedPayoutFarm, setSelectedPayoutFarm] = useState(mockPayoutFarms[0]?.id || '');
+  const [selectedPayoutFarm, setSelectedPayoutFarm] = useState('');
   const [payoutStatusFilter, setPayoutStatusFilter] = useState('all');
-  const [payoutsList, setPayoutsList] = useState(mockAllPayouts);
+  const [payoutsList, setPayoutsList] = useState([]);
   const [batchDrawerOpen, setBatchDrawerOpen] = useState(false);
+  
+  const fetchPayouts = async (fId) => {
+    if (!fId) return;
+    try {
+       const res = await api.get(`/admin/payouts/${fId}`);
+       if (res.data.success) setPayoutsList(res.data.data);
+    } catch (err) {
+       console.error("Payouts fetch failed:", err);
+       setPayoutsList([]);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPayoutFarm) {
+      fetchPayouts(selectedPayoutFarm);
+    }
+  }, [selectedPayoutFarm]);
+
+  const payoutFarms = allFarms.filter(f => f.status === 'completed' || f.status === 'paid_out');
+
+  useEffect(() => {
+    if (payoutFarms.length > 0 && !selectedPayoutFarm) {
+      setSelectedPayoutFarm(payoutFarms[0].id);
+    }
+  }, [allFarms]);
   
   // Pagination states
   const ITEMS_PER_PAGE = 8;
@@ -402,7 +441,7 @@ export default function AdminDashboard() {
 
   // Farms Pagination Logic
   const fbStart = (farmsPage - 1) * ITEMS_PER_PAGE;
-  const paginatedFarms = mockAdminFarms.slice(fbStart, fbStart + ITEMS_PER_PAGE);
+  const paginatedFarms = allFarms.slice(fbStart, fbStart + ITEMS_PER_PAGE);
 
   // Users Pagination Logic
   const ubStart = (usersPage - 1) * ITEMS_PER_PAGE;
@@ -545,7 +584,7 @@ export default function AdminDashboard() {
               <div className="form-group" style={{ flex: '1 1 300px', maxWidth: '400px' }}>
                 <label className="form-label">Select Farm</label>
                 <select className="form-select form-input" value={selectedPayoutFarm} onChange={e => setSelectedPayoutFarm(e.target.value)}>
-                  {mockPayoutFarms.map(f => <option key={f.id} value={f.id}>{f.name} — {f.state}</option>)}
+                  {payoutFarms.map(f => <option key={f.id} value={f.id}>{f.name} — {f.state}</option>)}
                 </select>
               </div>
               <div className="form-group" style={{ width: '200px' }}>
@@ -561,25 +600,25 @@ export default function AdminDashboard() {
 
             {/* Farm Summary Cards */}
             {(() => {
-              const farm = mockPayoutFarms.find(f => f.id === selectedPayoutFarm);
+              const farm = payoutFarms.find(f => f.id === selectedPayoutFarm);
               if (!farm) return null;
+              
+              // We don't have these breakdown fields in the simple farm object,
+              // but we can calculate or get them if we had a detailed endpoint.
+              // For now, let's show what we have.
               return (
                 <div className="metric-cards" style={{ marginBottom: '32px' }}>
                   <div className="metric-card">
-                    <div className="metric-card-label">Total Proceeds</div>
-                    <div className="metric-card-value">₦{farm.total_proceeds.toLocaleString()}</div>
+                    <div className="metric-card-label">Total Funding</div>
+                    <div className="metric-card-value">₦{farm.total_budget.toLocaleString()}</div>
                   </div>
                   <div className="metric-card">
-                    <div className="metric-card-label">Investor Pool</div>
-                    <div className="metric-card-value green">₦{farm.investor_pool.toLocaleString()}</div>
+                    <div className="metric-card-label">Amount Raised</div>
+                    <div className="metric-card-value green">₦{farm.amount_raised.toLocaleString()}</div>
                   </div>
                   <div className="metric-card">
-                    <div className="metric-card-label">Farmer Payout</div>
-                    <div className="metric-card-value">₦{farm.farmer_payout.toLocaleString()}</div>
-                  </div>
-                  <div className="metric-card">
-                    <div className="metric-card-label">Platform Fee</div>
-                    <div className="metric-card-value">₦{farm.platform_fee.toLocaleString()}</div>
+                    <div className="metric-card-label">Status</div>
+                    <div className="metric-card-value" style={{ textTransform: 'capitalize' }}>{farm.status}</div>
                   </div>
                 </div>
               );
@@ -710,17 +749,17 @@ export default function AdminDashboard() {
                   {paginatedFarms.map(f => (
                     <tr key={f.id} onClick={() => navigate(`/farms/${f.id}`)} style={{ cursor: 'pointer' }} className="hover-row">
                       <td style={{ fontWeight: 500 }}>{f.name}</td>
-                      <td>{f.farmer}</td>
-                      <td><span className="badge badge-active">{f.crop}</span></td>
+                      <td>{f.farmer?.full_name}</td>
+                      <td><span className="badge badge-active">{f.crop_name}</span></td>
                       <td className="text-mono">₦{(f.total_budget/1000).toFixed(0)}k</td>
                       <td className="text-mono">₦{(f.amount_raised/1000).toFixed(0)}k</td>
-                      <td><span className={`badge badge-${f.status === 'active' ? 'active' : f.status === 'funded' ? 'pending' : 'draft'}`} style={{ textTransform: 'capitalize' }}>{f.status}</span></td>
+                      <td><span className={`badge badge-${f.status === 'active' ? 'active' : f.status === 'funded' ? 'pending' : f.status === 'completed' ? 'completed' : 'draft'}`} style={{ textTransform: 'capitalize' }}>{f.status}</span></td>
                       <td><Link to={`/farms/${f.id}`} className="btn-link">View</Link></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <Pagination currentPage={farmsPage} totalPages={Math.ceil(mockAdminFarms.length / ITEMS_PER_PAGE)} onPageChange={setFarmsPage} />
+              <Pagination currentPage={farmsPage} totalPages={Math.ceil(allFarms.length / ITEMS_PER_PAGE)} onPageChange={setFarmsPage} />
             </div>
           </>
         )}
