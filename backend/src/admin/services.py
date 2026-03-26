@@ -20,12 +20,13 @@ class AdminServices:
         )
         result = await session.exec(statement)
         farms = result.all()
+        
         return [
             {
-                **farm.model_dump(include_computed=True),
+                **farm.model_dump(),
                 "status": farm.farm_status,
-                "farmer": farm.owner.model_dump(include_computed=True) if farm.owner else None,
-                "milestones": [m.model_dump(include_computed=True) for m in farm.milestones]
+                "farmer": farm.owner, 
+                "milestones": farm.milestones 
             } for farm in farms
         ]
 
@@ -51,10 +52,10 @@ class AdminServices:
         result = await session.exec(statement)
         farm = result.one()
         return {
-            **farm.model_dump(include_computed=True),
+            **farm.model_dump(),
             "status": farm.farm_status,
-            "farmer": farm.owner.model_dump(include_computed=True),
-            "milestones": [m.model_dump(include_computed=True) for m in farm.milestones]
+            "farmer": farm.owner,
+            "milestones": farm.milestones
         }
 
     async def reject_farm(self, farm_id: uuid.UUID, reason: str, session: AsyncSession) -> dict:
@@ -77,10 +78,10 @@ class AdminServices:
         result = await session.exec(statement)
         farm = result.one()
         return {
-            **farm.model_dump(include_computed=True),
+            **farm.model_dump(),
             "status": farm.farm_status,
-            "farmer": farm.owner.model_dump(include_computed=True),
-            "milestones": [m.model_dump(include_computed=True) for m in farm.milestones]
+            "farmer": farm.owner,
+            "milestones": farm.milestones
         }
 
     async def get_pending_milestones(self, session: AsyncSession) -> List[dict]:
@@ -93,7 +94,7 @@ class AdminServices:
         milestones = result.all()
         return [
             {
-                **m.model_dump(include_computed=True),
+                **m.model_dump(),
                 "farm_name": m.farm.name if m.farm else "Unknown Farm",
                 "farmer_name": m.farm.owner.full_name if m.farm and m.farm.owner else "Unknown Farmer"
             } for m in milestones
@@ -111,10 +112,8 @@ class AdminServices:
         milestone.status = MilestoneStatus.VERIFIED
         session.add(milestone)
         
-        # Check if all milestones for this farm are now verified
         farm = await session.get(Farm, milestone.farm_id)
         
-        # Verify next milestone if exists
         next_order = milestone.order_number + 1
         statement = select(Milestone).where(Milestone.farm_id == farm.id, Milestone.order_number == next_order)
         result = await session.exec(statement)
@@ -124,7 +123,6 @@ class AdminServices:
             next_milestone.status = MilestoneStatus.PENDING_PROOF
             session.add(next_milestone)
         
-        # Finalize farm if all milestones are verified
         milestone_statement = select(Milestone).where(Milestone.farm_id == farm.id)
         milestones_result = await session.exec(milestone_statement)
         all_milestones = milestones_result.all()
@@ -136,7 +134,6 @@ class AdminServices:
         await session.commit()
         await session.refresh(milestone)
         
-        # Re-fetch with relationships
         statement = select(Milestone).where(Milestone.id == milestone.id).options(
             selectinload(Milestone.farm).selectinload(Farm.owner),
             selectinload(Milestone.proofs)
@@ -144,7 +141,7 @@ class AdminServices:
         result = await session.exec(statement)
         milestone = result.one()
         return {
-            **milestone.model_dump(include_computed=True),
+            **milestone.model_dump(),
             "farm_name": milestone.farm.name,
             "farmer_name": milestone.farm.owner.full_name
         }
@@ -161,7 +158,6 @@ class AdminServices:
         await session.commit()
         await session.refresh(milestone)
         
-        # Re-fetch with relationships
         statement = select(Milestone).where(Milestone.id == milestone.id).options(
             selectinload(Milestone.farm).selectinload(Farm.owner),
             selectinload(Milestone.proofs)
@@ -169,7 +165,7 @@ class AdminServices:
         result = await session.exec(statement)
         milestone = result.one()
         return {
-            **milestone.model_dump(include_computed=True),
+            **milestone.model_dump(),
             "farm_name": milestone.farm.name,
             "farmer_name": milestone.farm.owner.full_name
         }
