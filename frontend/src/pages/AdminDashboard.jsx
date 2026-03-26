@@ -7,6 +7,8 @@ import { mockAdminStats, mockPendingProofs, mockPayoutFarms, mockAllPayouts } fr
 import DashboardLayout from '../components/DashboardLayout';
 import CurrencyInput from '../components/CurrencyInput';
 import Pagination from '../components/Pagination';
+import LoadingState, { Spinner } from '../components/Loader';
+import Button from '../components/Button';
 
 const baseAdminFarms = [
   { id:'f1', name:'Oduya Maize Farm', farmer:'Emeka Obi', crop:'Maize', total_budget:5000000, amount_raised:3800000, status:'active' },
@@ -45,14 +47,29 @@ const navItems = [
 ];
 
 function PendingFarmCard({ farm, onAction }) {
+  const [loading, setLoading] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (rejectionReason.length < 10) return;
-    onAction(farm.id, 'reject', rejectionReason);
-    setRejecting(false);
-    setRejectionReason('');
+    setLoading(true);
+    try {
+      await onAction(farm.id, 'reject', rejectionReason);
+      setRejecting(false);
+      setRejectionReason('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    setLoading(true);
+    try {
+      await onAction(farm.id, 'approve');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const tierColor = farm.farmer?.trust_tier === 'verified' ? 'var(--color-primary)' : 
@@ -90,8 +107,8 @@ function PendingFarmCard({ farm, onAction }) {
           <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Target Funding</div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
              <Link to={`/farms/${farm.id}`} className="btn btn-ghost btn-sm">View Details</Link>
-             <button className="btn btn-solid btn-sm" onClick={() => onAction(farm.id, 'approve')}>Approve</button>
-             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => setRejecting(true)}>Reject</button>
+             <Button variant="solid" size="sm" onClick={handleApprove} loading={loading}>Approve</Button>
+             <Button variant="ghost" size="sm" style={{ color: 'var(--color-danger)' }} onClick={() => setRejecting(true)} disabled={loading}>Reject</Button>
           </div>
         </div>
       </div>
@@ -108,8 +125,8 @@ function PendingFarmCard({ farm, onAction }) {
             style={{ marginBottom: '12px' }}
           />
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn btn-solid btn-sm" style={{ background: 'var(--color-danger)' }} onClick={handleReject} disabled={rejectionReason.length < 10}>Reject Farm</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setRejecting(false)}>Cancel</button>
+            <Button variant="solid" size="sm" style={{ background: 'var(--color-danger)' }} onClick={handleReject} disabled={rejectionReason.length < 10} loading={loading}>Reject Farm</Button>
+            <Button variant="ghost" size="sm" onClick={() => setRejecting(false)} disabled={loading}>Cancel</Button>
           </div>
         </div>
       )}
@@ -119,14 +136,29 @@ function PendingFarmCard({ farm, onAction }) {
 
 function ProofReviewCard({ proof, onAction }) {
   const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!rejectionReason.trim()) return;
-    onAction(proof.id, 'reject', rejectionReason.trim());
-    setRejecting(false);
-    setRejectionReason('');
+    setLoading(true);
+    try {
+      await onAction(proof.id, 'reject', rejectionReason.trim());
+      setRejecting(false);
+      setRejectionReason('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    setLoading(true);
+    try {
+      await onAction(proof.id, 'approve');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -181,17 +213,25 @@ function ProofReviewCard({ proof, onAction }) {
                 placeholder="e.g. Photo is blurry or does not clearly show fertilizer application."
                 value={rejectionReason}
                 onChange={e => setRejectionReason(e.target.value)}
-                style={{ marginBottom: '12px' }}
+                style={{ marginBottom: '4px' }}
               />
+              <p style={{ 
+                fontSize: '11px', 
+                color: rejectionReason.trim().length > 0 && rejectionReason.trim().length < 10 ? 'var(--color-danger)' : 'var(--color-text-muted)',
+                marginBottom: '12px',
+                fontWeight: rejectionReason.trim().length > 0 && rejectionReason.trim().length < 10 ? 600 : 400
+              }}>
+                {rejectionReason.trim().length < 10 ? `Minimum 10 characters required (${rejectionReason.trim().length}/10)` : 'Length requirement met ✓'}
+              </p>
               <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="btn btn-sm" style={{ background: 'var(--color-danger)', color: '#fff' }} onClick={handleReject} disabled={!rejectionReason.trim()}>Confirm Rejection</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => { setRejecting(false); setRejectionReason(''); }}>Cancel</button>
+                <Button size="sm" style={{ background: 'var(--color-danger)', color: '#fff' }} onClick={handleReject} disabled={rejectionReason.trim().length < 10} loading={loading}>Confirm Rejection</Button>
+                <Button variant="ghost" size="sm" onClick={() => { setRejecting(false); setRejectionReason(''); }} disabled={loading}>Cancel</Button>
               </div>
             </div>
           ) : (
             <div className="review-actions-row">
-              <button className="btn btn-solid btn-sm" style={{ background: 'var(--color-primary)' }} onClick={() => onAction(proof.id, 'approve')}>✓ Approve Milestone</button>
-              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => setRejecting(true)}>✕ Reject</button>
+              <Button variant="solid" size="sm" style={{ background: 'var(--color-primary)' }} onClick={handleApprove} loading={loading}>✓ Approve Milestone</Button>
+              <Button variant="ghost" size="sm" style={{ color: 'var(--color-danger)' }} onClick={() => setRejecting(true)} disabled={loading}>✕ Reject</Button>
             </div>
           )}
         </div>
@@ -260,6 +300,17 @@ export default function AdminDashboard() {
   useEffect(() => {
     initData();
     fetchProfile();
+    
+    // Auto-refresh every 30 seconds (only if window is focused)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchStats();
+        fetchPendingFarms();
+        fetchPendingProofs();
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const handleFarmAction = async (id, action, reason) => {
@@ -274,7 +325,14 @@ export default function AdminDashboard() {
       fetchPendingFarms();
       fetchStats();
     } catch (err) {
-      addToast("Action Failed", "error", err.response?.data?.detail || "Could not complete the request.");
+      let errorMsg = "Could not complete the request.";
+      if (err.response?.status === 422) {
+        const details = err.response.data?.detail;
+        errorMsg = Array.isArray(details) ? details.map(d => d.msg).join(", ") : (details || "Validation error");
+      } else {
+        errorMsg = err.response?.data?.detail || errorMsg;
+      }
+      addToast("Action Failed", "error", errorMsg);
     }
   };
 
@@ -290,7 +348,15 @@ export default function AdminDashboard() {
       fetchPendingProofs();
       fetchStats();
     } catch (err) {
-      addToast("Action Failed", "error", err.response?.data?.detail || "Could not complete the request.");
+      console.error("Milestone action error:", err);
+      let errorMsg = "Could not complete the request.";
+      if (err.response?.status === 422) {
+        const details = err.response.data?.detail;
+        errorMsg = Array.isArray(details) ? details.map(d => d.msg).join(", ") : (details || "Validation error");
+      } else {
+        errorMsg = err.response?.data?.detail || errorMsg;
+      }
+      addToast("Action Failed", "error", errorMsg);
     }
   };
 
@@ -369,6 +435,8 @@ export default function AdminDashboard() {
       <button className="btn btn-ghost btn-sm btn-full" onClick={() => { logout(); navigate('/auth'); }}>Log Out</button>
     </>
   );
+
+  if (loading) return <LoadingState message="Brewing your dashboard..." />;
 
   return (
     <DashboardLayout navItems={navItems} activeTab={tab} onTabChange={handleTabChange} footer={navFooter}>
@@ -462,7 +530,7 @@ export default function AdminDashboard() {
               <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-secondary)' }}><div style={{ fontSize: '40px', marginBottom: '12px' }}>🎉</div><p>All milestone proofs have been verified!</p></div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {proofs.map(r => <ProofReviewCard key={r.id} proof={r} onAction={handleAction} />)}
+                {proofs.map(r => <ProofReviewCard key={`${r.id}-${r.submitted_at}`} proof={r} onAction={handleAction} />)}
                 <Pagination currentPage={proofsPage} totalPages={Math.ceil(proofs.length / ITEMS_PER_PAGE)} onPageChange={setProofsPage} />
               </div>
             )}

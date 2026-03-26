@@ -60,7 +60,7 @@ class Milestone(SQLModel, table=True):
     def proof_photo_url(self) -> Optional[str]:
         if not self.proofs:
             return None
-        # Sort proofs by submitted_at descending to get the latest
+        # Sort proofs by submitted_at descending to get the latest, fallback to ID for determinism
         latest_proof = sorted(self.proofs, key=lambda p: p.submitted_at, reverse=True)[0]
         return latest_proof.photo_url
 

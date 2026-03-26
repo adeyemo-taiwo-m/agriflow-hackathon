@@ -61,8 +61,8 @@ class AdminMilestoneOut(BaseModel):
     model_config = {"from_attributes": True}
     id: uuid.UUID
     farm_id: uuid.UUID
-    farm_name: str
-    farmer_name: str
+    farm_name: Optional[str] = None
+    farmer_name: Optional[str] = None
     name: str
     order_number: int
     expected_week: int

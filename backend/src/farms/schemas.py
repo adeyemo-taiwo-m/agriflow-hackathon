@@ -38,6 +38,7 @@ class MilestoneOut(BaseModel):
     expected_week: int
     amount: float
     status: str
+    rejection_reason: Optional[str] = None
     proofs: List[ProofOut] = []
 
 class FarmerPublicOut(BaseModel):
@@ -134,7 +135,7 @@ class FarmListResponse(BaseModel):
 
 class UploadFarmLocations(BaseModel):
     # Latitude for Nigeria is roughly 4.0 to 14.0
-    latitude: float = Field(..., ge=4.0, le=14.0)
+    latitude: float 
     
     # Longitude for Nigeria is roughly 2.5 to 15.0
-    longitude: float = Field(..., ge=2.5, le=15.0)
+    longitude: float

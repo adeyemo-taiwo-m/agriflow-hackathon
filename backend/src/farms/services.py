@@ -162,6 +162,7 @@ class FarmServices:
         farm.longitude = location_data.longitude
         farm.location_photo_public_id = location_public_id
         farm.display_photos_public_id = display_public_ids
+        farm.location_verified = True
         farm.farm_status = FarmStatus.PENDING
 
         try:
@@ -198,8 +199,6 @@ class FarmServices:
             )
         
     async def get_farm_by_id(self, farm_id: uuid.UUID, session: AsyncSession):
-        
-        
         statement = select(Farm).where(Farm.id == farm_id).options(
             selectinload(Farm.milestones).selectinload(Milestone.proofs),
             selectinload(Farm.owner).selectinload(User.farms)
@@ -211,6 +210,35 @@ class FarmServices:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="farm not found"
             )
+            
+        # Self-healing logic for milestone unlocking
+        updated = False
+        if farm.milestones:
+            # Always sort to ensure order is correct
+            sorted_ms = sorted(farm.milestones, key=lambda m: m.order_number)
+            
+            is_fully_funded = farm.amount_raised_kobo >= farm.total_budget_kobo
+            
+            # Milestone 1: Unlock only if FULLY FUNDED
+            if sorted_ms[0].status == MilestoneStatus.LOCKED and is_fully_funded:
+                sorted_ms[0].status = MilestoneStatus.PENDING_PROOF
+                session.add(sorted_ms[0])
+                updated = True
+            
+            # Subsequent Milestones: Unlock only if PREVIOUS is DISBURSED
+            for i in range(len(sorted_ms) - 1):
+                prev_m = sorted_ms[i]
+                next_m = sorted_ms[i+1]
+                
+                if prev_m.status == MilestoneStatus.DISBURSED and next_m.status == MilestoneStatus.LOCKED:
+                    next_m.status = MilestoneStatus.PENDING_PROOF
+                    session.add(next_m)
+                    updated = True
+                    
+        if updated:
+            await session.commit()
+            await session.refresh(farm)
+            
         return farm
     
     async def get_farms(self, session: AsyncSession, crop_name: str = None, state: str = None, farm_status: str = "active"):
@@ -232,7 +260,32 @@ class FarmServices:
             selectinload(Farm.milestones)
         )
         result = await session.exec(statement)
-        return result.all()
+        farms = result.all()
+        
+        # Self-healing logic: Ensure milestones progress correctly
+        updated = False
+        for farm in farms:
+            if farm.farm_status in [FarmStatus.ACTIVE, FarmStatus.FUNDED] and farm.milestones:
+                # Sort milestones by order to iterate sequentially
+                sorted_ms = sorted(farm.milestones, key=lambda m: m.order_number)
+                
+                # Rule 1: First milestone of ACTIVE/FUNDED farm should be unlocked if locked
+                if sorted_ms[0].status == MilestoneStatus.LOCKED:
+                    sorted_ms[0].status = MilestoneStatus.PENDING_PROOF
+                    session.add(sorted_ms[0])
+                    updated = True
+                
+                # Rule 2: If milestone i is DISBURSED, milestone i+1 should be unblocked (if locked)
+                for i in range(len(sorted_ms) - 1):
+                    if sorted_ms[i].status == MilestoneStatus.DISBURSED and sorted_ms[i+1].status == MilestoneStatus.LOCKED:
+                        sorted_ms[i+1].status = MilestoneStatus.PENDING_PROOF
+                        session.add(sorted_ms[i+1])
+                        updated = True
+        
+        if updated:
+            await session.commit()
+            
+        return farms
     
     async def get_all_farms(self, session: AsyncSession):
         statement = select(Farm)

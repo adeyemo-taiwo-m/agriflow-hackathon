@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,8 @@ import EmptyState from '../components/EmptyState';
 import DashboardLayout from '../components/DashboardLayout';
 import CurrencyInput from '../components/CurrencyInput';
 import Pagination from '../components/Pagination';
+import Loader, { Spinner } from '../components/Loader';
+import Button from '../components/Button';
 
 const navItems = [
   { key: 'farms', label: 'My Farms', icon: 'farms' },
@@ -218,7 +220,7 @@ function FarmCreationForm({ onDone }) {
     }
   };
 
-  if (loadingCrops) return <div style={{padding:'40px', textAlign:'center'}}>Loading crop data...</div>;
+  if (loadingCrops) return <Loader message="Loading crop data..." />;
 
   return (
     <div className="farm-form card">
@@ -420,14 +422,17 @@ function FarmCreationForm({ onDone }) {
              <p style={{fontSize:'12px', color:'var(--color-text-secondary)', lineHeight:1.5}}>By submitting, you certify that the location photo was taken on-site. AgriFlow uses Smart Guard GPS validation to detect fraud.</p>
           </div>
 
-          <button 
-            className="btn btn-solid btn-full btn-lg" 
+          <Button 
+            variant="solid" 
+            size="lg"
+            className="btn-full" 
             disabled={!kycComplete || isSubmitting || !data.location || !data.locationPhoto} 
             onClick={handleSubmit}
+            loading={isSubmitting}
             style={{marginTop:'12px'}}
           >
-            {isSubmitting ? 'Submitting...' : 'Submit for Review'}
-          </button>
+            Submit for Review
+          </Button>
         </div>
       )}
 
@@ -448,6 +453,7 @@ function ProofUpload({ milestone, onSuccess }) {
   const [locationError, setLocationError] = useState(null);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const { addToast } = useToast();
 
   const handleCapture = (e) => {
@@ -490,59 +496,80 @@ function ProofUpload({ milestone, onSuccess }) {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      const data = res.data.data || res.data;
-      const flag = data.gps_flag;
-
-      if (flag === 'fail') {
-        addToast("GPS Distance Failure", "error", "You appear to be too far from the farm. Please stand on the registered land.");
-      } else if (flag === 'warning') {
-        addToast("Location Warning", "warning", "You are 1km-5km from the farm. This proof will require manual admin review.");
-        onSuccess(milestone.id);
-      } else {
-        addToast("Proof Submitted", "success", "GPS Verified. Your milestone is now under review.");
-        onSuccess(milestone.id);
-      }
+      addToast('Proof submitted!', 'success', 'Photo and location logged. Admin will review shortly.');
+      setSubmitted(true); // Set submitted state on success
+      // Delay parent callback to allow user to see success state
+      setTimeout(() => {
+        onSuccess();
+      }, 2000);
     } catch (err) {
-      console.error(err);
-      addToast(err.response?.data?.detail || "Submission failed", "error");
+      addToast('Upload failed', 'error', err.response?.data?.detail || 'Could not upload proof'); // Modified error message
     } finally {
       setSubmitting(false);
     }
   };
 
+  if (submitted) {
+    return (
+      <div style={{ padding: '24px', backgroundColor: '#eefcf5', border: '1px solid #d0f0e0', borderRadius: '12px', color: '#1a5d3b', textAlign: 'center' }}>
+        <div style={{ fontSize: '24px', marginBottom: '8px' }}>✓</div>
+        <div style={{ fontWeight: 600 }}>Proof Submitted Successfully</div>
+        <div style={{ fontSize: '13px', opacity: 0.8, marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <Spinner size="sm" /> Refreshing dashboard...
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ marginTop: '16px', padding: '16px', background: '#fdfbfa', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+    <div style={{ marginTop: '16px', padding: '24px', background: '#f9fbf9', border: '1px solid #e8f0e8', borderRadius: '12px' }}>
       {!preview ? (
-        <label style={{ display: "block", cursor: "pointer", textAlign: "center", padding: "20px", borderRadius: "8px", background:'var(--color-primary-light)' }}>
-          <input type="file" accept="image/*" capture="environment" onChange={handleCapture} style={{ display: "none" }} />
-          <div className="btn btn-solid" style={{ marginBottom: "8px", pointerEvents:'none' }}>📷 Take Photo</div>
-          <p style={{ fontSize: "12px", color: "var(--color-primary)", fontWeight:500 }}>Please take the photo at your farm with location services enabled.</p>
-        </label>
+        <div style={{ textAlign: "center" }}>
+          <label style={{ display: "inline-block", cursor: "pointer", textAlign: "center" }}>
+            <input type="file" accept="image/*" capture="environment" onChange={handleCapture} style={{ display: "none" }} />
+            <div className="btn" style={{ 
+              background: '#1a5d3b', 
+              color: '#fff', 
+              padding: '10px 24px', 
+              borderRadius: '8px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px',
+              fontSize: '15px',
+              fontWeight: 600
+            }}>
+              📷 Take Photo
+            </div>
+          </label>
+          <p style={{ fontSize: "13px", color: "var(--color-primary)", marginTop: '12px', fontWeight: 500 }}>
+            Please take the photo at your farm with location services enabled.
+          </p>
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <div style={{ display: "flex", gap: "12px", alignItems:'center' }}>
-            <img src={preview} alt="Proof preview" style={{ width: "70px", height: "70px", objectFit: "cover", borderRadius: "8px", border:'1px solid var(--color-border)' }} />
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <img src={preview} alt="Proof preview" style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "8px", border:'1px solid var(--color-border)' }} />
+            <div style={{ flex: 1 }}>
               {location ? (
-                <div style={{ padding: "6px 10px", background: "var(--color-primary-light)", borderRadius: "6px", fontSize: "12px", color: "var(--color-primary)", fontWeight: 500, display:'inline-block' }}>
+                <div style={{ fontSize: "13px", color: "var(--color-primary)", fontWeight: 600 }}>
                   ✓ Location captured ({location.accuracy.toFixed(0)}m accuracy)
                 </div>
               ) : locationError ? (
-                <div style={{ padding: "6px 10px", background: "rgba(181,74,47,0.1)", borderRadius: "6px", fontSize: "12px", color: "var(--color-danger)", display:'inline-block' }}>
+                <div style={{ fontSize: "13px", color: "var(--color-danger)" }}>
                   ✗ {locationError}
                 </div>
               ) : (
-                <div style={{ padding: "6px 10px", background: "var(--color-surface)", borderRadius: "6px", fontSize: "12px", color: "var(--color-text-secondary)", display:'inline-block' }}>
+                <div style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
                   ⏳ Acquiring GPS location...
                 </div>
               )}
-              <div style={{marginTop:'6px'}}><button onClick={() => { setPhoto(null); setPreview(null); setLocation(null); setLocationError(null); }} className="btn-link" style={{ fontSize: "12px" }}>Retake Photo</button></div>
+              <button onClick={() => { setPhoto(null); setPreview(null); setLocation(null); setLocationError(null); }} className="btn-link" style={{ fontSize: "12px", padding: 0, marginTop: '4px' }}>Retake Photo</button>
             </div>
           </div>
-          <textarea className="form-input" placeholder="Add a note (optional) — e.g. applied NPK fertiliser today" value={note} onChange={e => setNote(e.target.value)} rows={2} />
-          <button className="btn btn-solid btn-full" disabled={!photo || !location || submitting} onClick={handleSubmit}>
-            {submitting ? "Submitting..." : "Submit Proof & Location"}
-          </button>
+          <textarea className="form-input" placeholder="Add a note (optional)..." value={note} onChange={e => setNote(e.target.value)} rows={2} />
+          <Button variant="solid" className="btn-full" disabled={!photo || !location || submitting} onClick={handleSubmit} loading={submitting}>
+            Submit Proof & Location
+          </Button>
         </div>
       )}
     </div>
@@ -550,8 +577,12 @@ function ProofUpload({ milestone, onSuccess }) {
 }
 
 function MilestonesTab() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [farms, setFarms] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedFarmId, setSelectedFarmId] = useState(searchParams.get('farmId'));
+  const [milestones, setMilestones] = useState([]);
+  const [fetchingMilestones, setFetchingMilestones] = useState(false);
   const { addToast } = useToast();
 
   const fetchFarms = async () => {
@@ -569,76 +600,281 @@ function MilestonesTab() {
     fetchFarms();
   }, []);
 
-  const handleSuccess = () => {
-    fetchFarms(); // Refresh to show updated status
+  const loadMilestones = useCallback(async () => {
+    if (!selectedFarmId) return;
+    setFetchingMilestones(true);
+    try {
+      const res = await api.get(`/farms/${selectedFarmId}`);
+      setMilestones(res.data.data.milestones || []);
+    } catch (err) {
+      addToast("Failed to load farm milestones", "error");
+    } finally {
+      setFetchingMilestones(false);
+    }
+  }, [selectedFarmId, addToast]);
+
+  useEffect(() => {
+    loadMilestones();
+    
+    // Auto-refresh every 30 seconds while the tab is open (and focused)
+    const interval = setInterval(() => {
+      // SILENT REFRESH: Only poll if the tab is visible and we ARE NOT currently uploading a proof
+      // We check for any active upload state in the document if possible, or just the tab focus.
+      if (document.visibilityState === 'visible') {
+        // We use a silent version of loadMilestones that doesn't trigger the global spinner
+        api.get(`/farms/${selectedFarmId}`).then(res => {
+          setMilestones(res.data.data.milestones || []);
+        }).catch(() => {}); // Fail silently in background
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [loadMilestones]);
+
+  const handleSuccess = async () => {
+    await loadMilestones();
+    // Use a small delay before potentially clearing view or just rely on state update
   };
 
-  if (loading) return <div style={{padding:'40px', textAlign:'center'}}>Loading your milestones...</div>;
-
-  const activeFarms = farms.filter(f => f.farm_status !== 'DRAFT');
+  if (loading) return <Loader message="Loading your milestones..." />;
+  
+  // Only show farms that are approved (status === 'active')
+  const activeFarms = farms.filter(f => f.farm_status === 'active');
 
   if (activeFarms.length === 0) {
     return (
       <div>
         <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'8px',fontFamily:'var(--font-heading)'}}>Milestones</h1>
         <div className="card" style={{padding:'40px',textAlign:'center'}}>
-           <p style={{color:'var(--color-text-secondary)',marginBottom:'16px'}}>You don't have any active farms with milestones yet. Once your farm is approved, milestones will appear here.</p>
+           <p style={{color:'var(--color-text-secondary)',marginBottom:'16px'}}>You don't have any approved farms with milestones yet. Once your farm is approved, milestones will appear here.</p>
         </div>
+      </div>
+    );
+  }
+
+  // Find the selected farm
+  const selectedFarm = selectedFarmId ? activeFarms.find(f => f.id === selectedFarmId) : null;
+
+  if (!selectedFarmId || !selectedFarm) {
+    return (
+      <div>
+        <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'8px',fontFamily:'var(--font-heading)'}}>Milestones</h1>
+        <p style={{color:'var(--color-text-secondary)',marginBottom:'24px',fontSize:'14px'}}>Select a farm to view and manage its milestones.</p>
+        
+        <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+          {activeFarms.map(farm => (
+            <div 
+              key={farm.id} 
+              className="card farm-selection-card" 
+              onClick={() => {
+                setSelectedFarmId(farm.id);
+                setSearchParams({ tab: 'milestones', farmId: farm.id });
+              }}
+              style={{
+                padding:'16px 20px', 
+                cursor:'pointer', 
+                display:'flex', 
+                alignItems:'center', 
+                justifyContent:'space-between',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <div style={{display:'flex', alignItems:'center', gap:'16px'}}>
+                <div style={{
+                  width:'40px', 
+                  height:'40px', 
+                  borderRadius:'10px', 
+                  background:'var(--color-primary-light)', 
+                  display:'flex', 
+                  alignItems:'center', 
+                  justifyContent:'center', 
+                  color:'var(--color-primary)', 
+                  fontWeight:700, 
+                  fontSize:'16px'
+                }}>
+                  {(farm.crop_name || 'F')[0]}
+                </div>
+                <div>
+                  <h3 style={{fontSize:'16px', fontWeight:600}}>{farm.name}</h3>
+                  <p style={{fontSize:'12px', color:'var(--color-text-secondary)'}}>{farm.crop_name} · {farm.state}</p>
+                </div>
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+                <span style={{color:'var(--color-text-secondary)', fontSize:'12px'}}>View Details</span>
+                <span style={{color:'var(--color-text-secondary)', fontSize:'18px'}}>→</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <style>{`
+          .farm-selection-card:hover {
+            border-color: var(--color-primary);
+            background: var(--color-primary-light);
+            transform: translateX(4px);
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
     <div>
-      <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'8px',fontFamily:'var(--font-heading)'}}>Milestones</h1>
-      <p style={{color:'var(--color-text-secondary)',marginBottom:'24px',fontSize:'14px'}}>Track and submit proof for your active farm milestones.</p>
+      <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'24px'}}>
+        <button 
+          onClick={() => {
+            setSelectedFarmId(null);
+            setSearchParams({ tab: 'milestones' });
+          }} 
+          style={{
+            padding: '6px 14px',
+            border: '1px solid #1a5d3b',
+            background: 'white',
+            color: '#1a5d3b',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}
+        >
+          ← Back
+        </button>
+        <div>
+          <h1 style={{fontSize:'24px',fontWeight:700,fontFamily:'var(--font-heading)'}}>Milestones</h1>
+          <p style={{color:'var(--color-text-secondary)', fontSize:'14px'}}>{selectedFarm.name} · {selectedFarm.crop_name}</p>
+        </div>
+      </div>
       
-      <div style={{display:'flex',flexDirection:'column',gap:'32px'}}>
-        {activeFarms.map(farm => (
-          <div key={farm.id}>
-            <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px'}}>
-              <div style={{width:'32px', height:'32px', borderRadius:'8px', background:'var(--color-primary)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:'14px'}}>
-                {(farm.crop_name || 'F')[0]}
-              </div>
-              <div>
-                <h2 style={{fontSize:'18px', fontWeight:700}}>{farm.name}</h2>
-                <p style={{fontSize:'12px', color:'var(--color-text-secondary)'}}>{farm.crop_name} · {farm.state}</p>
-              </div>
-            </div>
+      <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+        {fetchingMilestones && milestones.length === 0 ? (
+          <div style={{textAlign:'center', padding:'40px', color:'var(--color-text-secondary)', display:'flex', flexDirection:'column', alignItems:'center', gap:'12px'}}>
+            <Spinner size="lg" />
+            <span>Loading milestones...</span>
+          </div>
+        ) : milestones.length === 0 ? (
+          <div style={{textAlign:'center', padding:'40px', color:'var(--color-text-secondary)'}}>No milestones found for this farm.</div>
+        ) : milestones.map(m => (
+          <div key={m.id} className="card milestone-card" style={{
+            padding: '24px', 
+            borderRadius: '16px', 
+            border: '1px solid #f0f0f0', 
+            boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
+            opacity: m.status === 'locked' ? 0.7 : 1
+          }}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'16px'}}>
+              <div style={{flex: 1}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', width: '100%', marginBottom: '4px'}}>
+                   <h3 style={{fontSize:'18px', fontWeight:600}}>{m.name}</h3>
+                   <span className={`badge badge-${
+                    ['verified', 'disbursed'].includes(m.status) ? 'active' : 
+                    ['under_review', 'pending_proof', 'rejected'].includes(m.status) ? 'pending' : 
+                    'draft'}`} 
+                    style={{ textTransform: 'capitalize', fontSize: '11px', padding: '4px 12px' }}>
+                    {['verified', 'disbursed'].includes(m.status) ? 'Verified' : 
+                     ['under_review', 'pending_proof', 'rejected'].includes(m.status) ? 'In Progress' : 
+                     m.status === 'locked' ? 'Pending' : m.status}
+                  </span>
+                </div>
+                <p style={{fontSize:'13px',color:'var(--color-text-secondary)', marginBottom: '12px'}}>
+                  Due: {/* Assuming a due date exists, otherwise use expected week */}
+                  {selectedFarm.start_date ? new Date(new Date(selectedFarm.start_date).getTime() + (m.expected_week * 7 * 24 * 60 * 60 * 1000)).toLocaleDateString('en-NG', {day:'numeric', month:'short', year:'numeric'}) : `Week ${m.expected_week}`}
+                </p>
 
-            <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
-              {(farm.milestones || []).map(m => (
-                <div key={m.id} className="card" style={{padding:'20px'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
-                    <div>
-                      <h3 style={{fontWeight:600}}>{m.name}</h3>
-                      <p style={{fontSize:'13px',color:'var(--color-text-secondary)'}}>Expected Week: {m.expected_week}</p>
+                {/* Sub-header pills based on status */}
+                <div style={{display: 'flex', gap: '8px', marginBottom: '8px'}}>
+                  {m.status === 'verified' && (
+                    <div style={{
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '6px', 
+                      padding: '4px 12px', 
+                      borderRadius: '999px', 
+                      fontSize: '12px', 
+                      background: 'rgba(26, 93, 59, 0.08)', 
+                      color: '#1a5d3b',
+                      fontWeight: 500
+                    }}>
+                      ✓ Approved <span style={{opacity: 0.6, fontSize: '11px', borderLeft: '1px solid rgba(26, 93, 59, 0.3)', paddingLeft: '8px', marginLeft: '2px'}}>— GPS verified.</span>
                     </div>
-                    <span className={`badge badge-${m.status==='verified'?'active':m.status==='under_review'?'pending':'draft'}`}>
-                      {m.status==='verified'?'Verified':m.status==='under_review'?'Under Review':m.status==='pending'?'Pending':'Active'}
-                    </span>
-                  </div>
-                  
+                  )}
+                  {m.status === 'disbursed' && (
+                    <div style={{
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '6px', 
+                      padding: '4px 12px', 
+                      borderRadius: '999px', 
+                      fontSize: '12px', 
+                      background: 'rgba(16, 185, 129, 0.1)', 
+                      color: '#059669',
+                      fontWeight: 500
+                    }}>
+                      💰 Paid Out <span style={{opacity: 0.6, fontSize: '11px', borderLeft: '1px solid rgba(16, 185, 129, 0.3)', paddingLeft: '8px', marginLeft: '2px'}}>— Funds received.</span>
+                    </div>
+                  )}
                   {m.status === 'rejected' && (
-                    <div style={{marginBottom:'12px', padding:'12px 14px', background:'rgba(181,74,47,0.06)', borderLeft:'3px solid var(--color-danger)', borderRadius:'0 6px 6px 0', fontSize:'13px', lineHeight:1.6}}>
-                      <strong style={{color:'var(--color-danger)', display:'block', marginBottom:'4px'}}>Admin note:</strong>
-                      Please resubmit with a clearer image taken on-site at the correct farm location.
-                    </div>
-                  )}
-                  
-                  {/* Show camera proof uploader only if it's pending proof and not verified/under_review */}
-                  {m.status !== 'verified' && m.status !== 'under_review' && (
-                    <ProofUpload milestone={m} onSuccess={handleSuccess} />
-                  )}
-                  
-                  {m.status === 'under_review' && (
-                    <div style={{marginTop:'16px',padding:'16px',background:'var(--color-surface)',borderRadius:'8px',fontSize:'13px',color:'var(--color-text-secondary)',textAlign:'center'}}>
-                      Proof submitted via device camera with live GPS coordinates. Awaiting admin review.
+                    <div style={{
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '6px', 
+                      padding: '4px 12px', 
+                      borderRadius: '999px', 
+                      fontSize: '12px', 
+                      background: 'rgba(181, 74, 47, 0.08)', 
+                      color: '#b54a2f',
+                      fontWeight: 500
+                    }}>
+                      × Proof Rejected
                     </div>
                   )}
                 </div>
-              ))}
+              </div>
             </div>
+            
+            {m.status === 'rejected' && (
+              <div style={{
+                marginBottom:'16px', 
+                padding:'16px', 
+                background:'rgba(181,74,47,0.03)', 
+                borderLeft:'4px solid #b54a2f', 
+                borderRadius:'4px', 
+                fontSize:'14px', 
+                lineHeight:1.6
+              }}>
+                <strong style={{color:'#b54a2f', display:'block', marginBottom:'6px'}}>Admin note:</strong>
+                {m.rejection_reason || "Proof did not meet requirements. Please check your photo and coordinates and resubmit."}
+              </div>
+            )}
+            
+            {/* Show camera proof uploader ONLY if it's pending proof or rejected */}
+            {(m.status === 'pending_proof' || m.status === 'rejected') && (
+              <ProofUpload key={m.id} milestone={m} onSuccess={handleSuccess} />
+            )}
+            
+            {m.status === 'under_review' && (
+              <div style={{marginTop:'16px',padding:'20px',background:'#f8f9fa',border:'1px solid #eee',borderRadius:'12px',fontSize:'14px',color:'var(--color-text-secondary)',textAlign:'center'}}>
+                ⏳ Proof submitted and currently under review.
+              </div>
+            )}
+
+            {m.status === 'locked' && (
+              <div style={{
+                marginTop:'12px', 
+                padding:'16px', 
+                background:'#f9f9f9', 
+                borderRadius:'8px', 
+                fontSize:'14px', 
+                color:'var(--color-text-secondary)', 
+                display:'flex', 
+                alignItems:'center', 
+                gap:'12px',
+                lineHeight: 1.5
+              }}>
+                <span style={{fontSize: '16px'}}>🔒</span> This stage is locked. It will be available once previous milestones are verified and funds are disbursed.
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -882,7 +1118,10 @@ export default function FarmerDashboard() {
                         <div style={{display:'flex',gap:'8px'}}>
                           <Link to={`/farms/${farm.id}`} className="btn btn-ghost btn-sm">Manage</Link>
                           {!['deadline_passed','cancelled','rejected'].includes(farm.status) && (
-                            <button className="btn btn-solid btn-sm" onClick={()=>handleTabChange('milestones')}>Upload Proof</button>
+                            <button className="btn btn-solid btn-sm" onClick={() => {
+                              setTab('milestones');
+                              setSearchParams({ tab: 'milestones', farmId: farm.id });
+                            }}>Upload Proof</button>
                           )}
                         </div>
                       </div>

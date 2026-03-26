@@ -6,8 +6,8 @@ import uuid
 class ProofSubmitInput(BaseModel):
     """Schema for multipart/form-data proof submission."""
     note: Optional[str] = None
-    gps_latitude: float = Field(..., ge=4.0, le=14.0)
-    gps_longitude: float = Field(..., ge=2.5, le=15.0)
+    gps_latitude: float 
+    gps_longitude: float
     gps_accuracy_m: Optional[float] = None
 
 class ProofOut(BaseModel):

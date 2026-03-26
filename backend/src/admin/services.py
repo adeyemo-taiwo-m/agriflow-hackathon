@@ -8,6 +8,9 @@ from sqlmodel import select, func
 from fastapi import HTTPException, status
 import uuid
 from sqlalchemy.orm import selectinload
+from src.admin.schemas import AdminMilestoneOut
+from src.investments.models import Investment, InvestmentStatus
+from src.utils.logger import logger
 
 
 class AdminServices:
@@ -41,6 +44,15 @@ class AdminServices:
         
         farm.farm_status = FarmStatus.ACTIVE
         session.add(farm)
+        
+        # Unlock the first milestone manually upon approval so farmer can start work
+        ms_statement = select(Milestone).where(Milestone.farm_id == farm.id, Milestone.order_number == 1)
+        ms_result = await session.exec(ms_statement)
+        first_milestone = ms_result.first()
+        if first_milestone and first_milestone.status == MilestoneStatus.LOCKED:
+            first_milestone.status = MilestoneStatus.PENDING_PROOF
+            session.add(first_milestone)
+            
         await session.commit()
         await session.refresh(farm)
         
@@ -84,24 +96,76 @@ class AdminServices:
             "milestones": farm.milestones
         }
 
+    async def get_stats(self, session: AsyncSession) -> dict:
+        """Global platform statistics."""
+        # Total farms
+        total_farms_stmt = select(func.count(Farm.id))
+        total_farms = (await session.exec(total_farms_stmt)).first() or 0
+        
+        # Active farms
+        active_farms_stmt = select(func.count(Farm.id)).where(Farm.farm_status == FarmStatus.ACTIVE)
+        active_farms = (await session.exec(active_farms_stmt)).first() or 0
+        
+        # Pending reviews
+        p_farms_stmt = select(func.count(Farm.id)).where(Farm.farm_status == FarmStatus.PENDING)
+        p_farms = (await session.exec(p_farms_stmt)).first() or 0
+        
+        p_ms_stmt = select(func.count(Milestone.id)).where(Milestone.status == MilestoneStatus.UNDER_REVIEW)
+        p_ms = (await session.exec(p_ms_stmt)).first() or 0
+        
+        # Users
+        investors_stmt = select(func.count(User.uid)).where(User.role == Role.INVESTOR)
+        total_investors = (await session.exec(investors_stmt)).first() or 0
+        
+        farmers_stmt = select(func.count(User.uid)).where(User.role == Role.FARMER)
+        total_farmers = (await session.exec(farmers_stmt)).first() or 0
+        
+        # Total funds raised
+        funds_stmt = select(func.sum(Farm.amount_raised_kobo))
+        total_funds_k = (await session.exec(funds_stmt)).first() or 0
+
+        return {
+            "total_farms": int(total_farms),
+            "active_farms": int(active_farms),
+            "pending_reviews": int(p_farms + p_ms),
+            "total_investors": int(total_investors),
+            "total_farmers": int(total_farmers),
+            "total_funds_raised": float(total_funds_k / 100)
+        }
+
     async def get_pending_milestones(self, session: AsyncSession) -> List[dict]:
-        """Retrieves all milestones under review."""
+        """Retrieves milestones with submitted proofs for admin review."""
         statement = select(Milestone).where(Milestone.status == MilestoneStatus.UNDER_REVIEW).options(
             selectinload(Milestone.farm).selectinload(Farm.owner),
             selectinload(Milestone.proofs)
-        )
+        ).order_by(Milestone.order_number.asc())
         result = await session.exec(statement)
         milestones = result.all()
-        return [
-            {
-                **m.model_dump(),
-                "farm_name": m.farm.name if m.farm else "Unknown Farm",
-                "farmer_name": m.farm.owner.full_name if m.farm and m.farm.owner else "Unknown Farmer"
-            } for m in milestones
-        ]
+        
+        pending_list = []
+        for m in milestones:
+            # Force refresh the proofs relationship to avoid stale data in session
+            await session.refresh(m, ["proofs"])
+            
+            # Safe guards to prevent crashes if relationships are missing
+            farm_name = m.farm.name if m.farm else "Unknown Farm"
+            farmer_name = m.farm.owner.full_name if m.farm and m.farm.owner else "Unknown Farmer"
+            
+            try:
+                data = AdminMilestoneOut.model_validate(m).model_dump()
+                data.update({
+                    "farm_name": farm_name,
+                    "farmer_name": farmer_name
+                })
+                pending_list.append(data)
+            except Exception as e:
+                logger.error(f"Failed to serialize milestone {m.id}: {str(e)}")
+                continue
+                
+        return pending_list
 
     async def approve_milestone(self, milestone_id: uuid.UUID, session: AsyncSession) -> dict:
-        """Verifies a milestone and unlocks the next one in the sequence."""
+        """Verifies a milestone proof."""
         milestone = await session.get(Milestone, milestone_id)
         if not milestone:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Milestone not found")
@@ -110,6 +174,33 @@ class AdminServices:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only milestones under review can be approved")
 
         milestone.status = MilestoneStatus.VERIFIED
+        session.add(milestone)
+        await session.commit()
+        await session.refresh(milestone)
+        
+        statement = select(Milestone).where(Milestone.id == milestone.id).options(
+            selectinload(Milestone.farm).selectinload(Farm.owner),
+            selectinload(Milestone.proofs)
+        )
+        result = await session.exec(statement)
+        milestone = result.one()
+        data = AdminMilestoneOut.model_validate(milestone).model_dump()
+        data.update({
+            "farm_name": milestone.farm.name if milestone.farm else "Unknown",
+            "farmer_name": milestone.farm.owner.full_name if milestone.farm and milestone.farm.owner else "Unknown"
+        })
+        return data
+
+    async def disburse_milestone(self, milestone_id: uuid.UUID, session: AsyncSession) -> dict:
+        """Confirms payment for a verified milestone and unlocks the next one."""
+        milestone = await session.get(Milestone, milestone_id)
+        if not milestone:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Milestone not found")
+        
+        if milestone.status != MilestoneStatus.VERIFIED:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only verified milestones can be disbursed")
+
+        milestone.status = MilestoneStatus.DISBURSED
         session.add(milestone)
         
         farm = await session.get(Farm, milestone.farm_id)
@@ -123,11 +214,12 @@ class AdminServices:
             next_milestone.status = MilestoneStatus.PENDING_PROOF
             session.add(next_milestone)
         
+        # Check if all milestones are disbursed to complete the farm
         milestone_statement = select(Milestone).where(Milestone.farm_id == farm.id)
         milestones_result = await session.exec(milestone_statement)
         all_milestones = milestones_result.all()
         
-        if all(m.status in [MilestoneStatus.VERIFIED, MilestoneStatus.DISBURSED] for m in all_milestones):
+        if all(m.status in [MilestoneStatus.DISBURSED] for m in all_milestones):
             farm.farm_status = FarmStatus.COMPLETED
             session.add(farm)
             
@@ -140,11 +232,12 @@ class AdminServices:
         )
         result = await session.exec(statement)
         milestone = result.one()
-        return {
-            **milestone.model_dump(),
-            "farm_name": milestone.farm.name,
-            "farmer_name": milestone.farm.owner.full_name
-        }
+        data = AdminMilestoneOut.model_validate(milestone).model_dump()
+        data.update({
+            "farm_name": milestone.farm.name if milestone.farm else "Unknown",
+            "farmer_name": milestone.farm.owner.full_name if milestone.farm and milestone.farm.owner else "Unknown"
+        })
+        return data
 
     async def reject_milestone(self, milestone_id: uuid.UUID, reason: str, session: AsyncSession) -> dict:
         """Rejects a milestone proof."""
@@ -164,35 +257,13 @@ class AdminServices:
         )
         result = await session.exec(statement)
         milestone = result.one()
-        return {
-            **milestone.model_dump(),
-            "farm_name": milestone.farm.name,
-            "farmer_name": milestone.farm.owner.full_name
-        }
+        data = AdminMilestoneOut.model_validate(milestone).model_dump()
+        data.update({
+            "farm_name": milestone.farm.name if milestone.farm else "Unknown",
+            "farmer_name": milestone.farm.owner.full_name if milestone.farm and milestone.farm.owner else "Unknown"
+        })
+        return data
 
-    async def get_stats(self, session: AsyncSession) -> dict:
-        """Global platform statistics."""
-        # Total farms
-        total_farms = await session.exec(select(func.count(Farm.id)))
-        # Active farms
-        active_farms = await session.exec(select(func.count(Farm.id)).where(Farm.farm_status == FarmStatus.ACTIVE))
-        # Pending reviews
-        pending_farms = await session.exec(select(func.count(Farm.id)).where(Farm.farm_status == FarmStatus.PENDING))
-        under_review_milestones = await session.exec(select(func.count(Milestone.id)).where(Milestone.status == MilestoneStatus.UNDER_REVIEW))
-        # Total investors/farmers
-        total_investors = await session.exec(select(func.count(User.uid)).where(User.role == Role.INVESTOR))
-        total_farmers = await session.exec(select(func.count(User.uid)).where(User.role == Role.FARMER))
-        # Total funds raised
-        total_funds_raised_kobo = await session.exec(select(func.sum(Farm.amount_raised_kobo)))
-
-        return {
-            "total_farms": total_farms.one() or 0,
-            "active_farms": active_farms.one() or 0,
-            "pending_reviews": (pending_farms.one() or 0) + (under_review_milestones.one() or 0),
-            "total_investors": total_investors.one() or 0,
-            "total_farmers": total_farmers.one() or 0,
-            "total_funds_raised": (total_funds_raised_kobo.one() or 0) / 100
-        }
 
     async def get_all_users(self, session: AsyncSession) -> List[dict]:
         """Returns all platform users with their farm counts."""
@@ -216,7 +287,6 @@ class AdminServices:
 
 from src.harvest.models import HarvestReport, HarvestReportStatus
 from src.payouts.models import Payout, PayoutStatus, RecipientType
-from src.investments.models import Investment, InvestmentStatus
 from src.utils.logger import logger
 from datetime import datetime
 
