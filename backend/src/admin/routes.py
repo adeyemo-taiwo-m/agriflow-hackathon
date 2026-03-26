@@ -85,7 +85,21 @@ async def approve_milestone(
     milestone_data = await admin_services.approve_milestone(id, session)
     return {
         "success": True,
-        "message": "Milestone approved successfully",
+        "message": "Milestone verified successfully",
+        "data": milestone_data
+    }
+
+@admin_router.post("/milestones/{id}/disburse", response_model=AdminMilestoneResponse, status_code=status.HTTP_200_OK)
+async def disburse_milestone(
+    id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    admin = Depends(get_current_admin),
+    admin_services: AdminServices = Depends(get_admin_services)
+):
+    milestone_data = await admin_services.disburse_milestone(id, session)
+    return {
+        "success": True,
+        "message": "Milestone disbursed and next stage unlocked",
         "data": milestone_data
     }
 
