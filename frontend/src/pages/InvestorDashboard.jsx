@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import KYCModal from "../components/KYCModal";
@@ -21,6 +21,7 @@ const navItems = [
 export default function InvestorDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(searchParams.get("tab") || "overview");
+  const hasMountedTabRefreshRef = useRef(false);
 
   useEffect(() => {
     const currentTab = searchParams.get("tab") || "overview";
@@ -112,6 +113,36 @@ export default function InvestorDashboard() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!hasMountedTabRefreshRef.current) {
+      hasMountedTabRefreshRef.current = true;
+      return;
+    }
+
+    if (document.visibilityState !== 'visible') return;
+
+    const refreshOnTabSwitch = async () => {
+      try {
+        const [invRes, payRes] = await Promise.all([
+          api.get("/investments"),
+          api.get("/investments/payouts/expected")
+        ]);
+        setInvestments(invRes.data.data);
+        setExpectedPayouts(payRes.data.data);
+
+        if (tab === "settings") {
+          const bankRes = await api.get("/banks");
+          setBanks(bankRes.data.data || []);
+        }
+      } catch (err) {
+        console.error("Failed to refresh investor tab data", err);
+      }
+    };
+
+    fetchProfile();
+    refreshOnTabSwitch();
+  }, [tab]);
 
   // Sync payout details when user profile updates (e.g. after KYC)
   useEffect(() => {
