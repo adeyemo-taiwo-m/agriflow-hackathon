@@ -119,7 +119,7 @@ function LiveLocationCapture({ onLocationCapture, onClear }) {
   );
 }
 
-function FarmCreationForm({ onDone }) {
+function FarmCreationForm({ onDone, continueFarm = null }) {
   const [step, setStep] = useState(1);
   const [data, setData] = useState({ name:'', crop:'', state:'', lga:'', size:'', description:'', photos:[], stages:[], totalBudget:'', startDate:'', endDate:'', expectedYield:'', salePrice:'', returnRate:'', location:null, locationPhoto:null });
   const [crops, setCrops] = useState([]);
@@ -164,6 +164,30 @@ function FarmCreationForm({ onDone }) {
         setLoadingCrops(false);
       });
   }, []);
+
+  useEffect(() => {
+    if (!continueFarm) return;
+
+    setData((prev) => ({
+      ...prev,
+      name: continueFarm.name || '',
+      crop: continueFarm.crop_name || '',
+      state: continueFarm.state || '',
+      lga: continueFarm.lga || '',
+      size: continueFarm.farm_size_ha ? String(continueFarm.farm_size_ha) : '',
+      description: continueFarm.description || '',
+      totalBudget: continueFarm.total_budget ? String(continueFarm.total_budget) : '',
+      startDate: continueFarm.start_date || '',
+      endDate: continueFarm.harvest_date || '',
+      expectedYield: continueFarm.expected_yield ? String(continueFarm.expected_yield) : '',
+      salePrice: continueFarm.sale_price_per_unit ? String(continueFarm.sale_price_per_unit) : '',
+      returnRate: continueFarm.return_rate ? String(continueFarm.return_rate * 100) : '',
+      photos: [],
+      location: null,
+      locationPhoto: null,
+    }));
+    setStep(5);
+  }, [continueFarm]);
 
   const selectedCropObj = crops.find(c => c.name === data.crop);
   const ref = data.crop ? CROP_REF[data.crop] : null;
@@ -217,26 +241,32 @@ function FarmCreationForm({ onDone }) {
       return addToast(`Each display photo must be ${FILE_LIMITS_MB.DISPLAY_PHOTO}MB or less`, "error");
     }
 
+    const isContinuation = continueFarm && continueFarm.farm_status === 'draft';
+
     setIsSubmitting(true);
     try {
-      // 1. Create Farm Record (Draft)
-      const farmPayload = {
-        crop_reference_id: selectedCropObj.id,
-        name: data.name,
-        state: data.state,
-        lga: data.lga,
-        farm_size_ha: farmSizeHa,
-        description: data.description,
-        total_budget: totalBudget,
-        expected_yield: expectedYield,
-        sale_price_per_unit: salePricePerUnit,
-        return_rate: returnRate / 100,
-        start_date: data.startDate,
-        harvest_date: data.endDate
-      };
+      let farmId = continueFarm?.id;
 
-      const createRes = await api.post('/farms/', farmPayload);
-      const farmId = createRes.data.data.id;
+      if (!isContinuation) {
+        // 1. Create Farm Record (Draft)
+        const farmPayload = {
+          crop_reference_id: selectedCropObj.id,
+          name: data.name,
+          state: data.state,
+          lga: data.lga,
+          farm_size_ha: farmSizeHa,
+          description: data.description,
+          total_budget: totalBudget,
+          expected_yield: expectedYield,
+          sale_price_per_unit: salePricePerUnit,
+          return_rate: returnRate / 100,
+          start_date: data.startDate,
+          harvest_date: data.endDate
+        };
+
+        const createRes = await api.post('/farms/', farmPayload);
+        farmId = createRes.data.data.id;
+      }
 
       // 2. Upload Files & Location (Finalize Submission)
       const formData = new FormData();
@@ -252,7 +282,13 @@ function FarmCreationForm({ onDone }) {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      addToast('Farm submitted for review!', 'success', 'All details and photos uploaded successfully.');
+      addToast(
+        isContinuation ? 'Farm registration completed!' : 'Farm submitted for review!',
+        'success',
+        isContinuation
+          ? 'Draft farm is now fully submitted for admin review.'
+          : 'All details and photos uploaded successfully.'
+      );
       onDone();
     } catch (err) {
       console.error(err);
@@ -441,6 +477,11 @@ function FarmCreationForm({ onDone }) {
       {step===5 && (
         <div className="fsec">
           <h3 className="fstitle">Location & Photos</h3>
+          {continueFarm && (
+            <div style={{padding:'12px 14px',background:'var(--color-primary-light)',borderRadius:'8px',fontSize:'13px',color:'var(--color-primary)',marginBottom:'4px'}}>
+              Continuing registration for <strong>{continueFarm.name}</strong>. Complete this upload step to submit the farm for review.
+            </div>
+          )}
           <p style={{fontSize:'14px', color:'var(--color-text-secondary)', marginBottom:'12px'}}>Final step: Anchor your farm with a live location photo and upload display pictures for investors.</p>
           
           <LiveLocationCapture 
@@ -1408,6 +1449,7 @@ export default function FarmerDashboard() {
   }, [searchParams]);
 
   const [done, setDone] = useState(false);
+  const draftFarmId = searchParams.get('draftFarmId');
 
   const handleTabChange = (k) => {
     setTab(k);
@@ -1472,6 +1514,10 @@ export default function FarmerDashboard() {
 
   const displayFarms = farms;
   const paginatedFarms = displayFarms.slice(fbStart, fbStart + ITEMS_PER_PAGE);
+  const draftFarmToContinue =
+    (tab === 'add' && draftFarmId)
+      ? farms.find((farm) => farm.id === draftFarmId && farm.farm_status === 'draft')
+      : null;
   const [payoutDetails, setPayoutDetails] = useState({ accountName: '', bankCode: '', accountNumber: '' });
   const [detailsSaved, setDetailsSaved] = useState(false);
   const kycComplete = user?.bvn_verified && user?.bank_verified;
@@ -1681,6 +1727,9 @@ export default function FarmerDashboard() {
                   }
 
                   const isReadyForHarvest = farm.is_harvest_ready;
+                  const isIncompleteRegistration = farm.farm_status === 'draft';
+                  const hasUploadableMilestone = Array.isArray(farm.milestones)
+                    && farm.milestones.some((m) => ['pending_proof', 'rejected'].includes(m.status));
 
                   return (
                     <div key={farm.id} className="card" style={{padding:'20px 24px', opacity:['cancelled','rejected'].includes(farm.farm_status)?0.7:1}}>
@@ -1703,15 +1752,29 @@ export default function FarmerDashboard() {
                         )}
                         
                         <div style={{display:'flex',gap:'8px'}}>
-                          <button 
-                            className="btn btn-ghost btn-sm" 
-                            onClick={() => {
-                              setTab('milestones');
-                              setSearchParams({ tab: 'milestones', farmId: farm.id });
-                            }}
-                          >
-                            Manage
-                          </button>
+                          {!isIncompleteRegistration && (
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                setTab('milestones');
+                                setSearchParams({ tab: 'milestones', farmId: farm.id });
+                              }}
+                            >
+                              Manage
+                            </button>
+                          )}
+
+                          {isIncompleteRegistration && (
+                            <button
+                              className="btn btn-solid btn-sm"
+                              onClick={() => {
+                                setTab('add');
+                                setSearchParams({ tab: 'add', draftFarmId: farm.id });
+                              }}
+                            >
+                              Continue Registration
+                            </button>
+                          )}
                           
                           {['draft', 'rejected', 'cancelled'].includes(farm.farm_status) && (
                             <button className="btn btn-ghost btn-sm" style={{color:'var(--color-danger)'}} onClick={() => handleDeleteFarm(farm.id)}>Delete</button>
@@ -1721,7 +1784,7 @@ export default function FarmerDashboard() {
                             <button className="btn btn-solid btn-sm" onClick={() => handleTabChange('harvest')}>
                               Report Harvest
                             </button>
-                          ) : !['deadline_passed','cancelled','rejected','completed','paid_out'].includes(farm.farm_status) && (
+                          ) : hasUploadableMilestone && !isIncompleteRegistration && !['deadline_passed','cancelled','rejected','completed','paid_out'].includes(farm.farm_status) && (
                             <button className="btn btn-solid btn-sm" onClick={() => {
                               setTab('milestones');
                               setSearchParams({ tab: 'milestones', farmId: farm.id });
@@ -1784,7 +1847,7 @@ export default function FarmerDashboard() {
                 <p style={{color:'var(--color-text-secondary)',fontSize:'16px',maxWidth:'320px',margin:'0 auto'}}>Our team will review your farm listing within 24 hours.</p>
                 <button className="btn btn-solid" style={{marginTop:'32px',padding:'12px 32px'}} onClick={()=>{setDone(false);handleTabChange('farms');}}>Back to My Farms</button>
               </div>
-            ) : <FarmCreationForm onDone={()=>setDone(true)}/>}
+            ) : <FarmCreationForm continueFarm={draftFarmToContinue} onDone={()=>setDone(true)}/>}
           </div>
         )}
 
