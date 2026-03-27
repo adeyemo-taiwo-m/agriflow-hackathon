@@ -39,7 +39,21 @@ export default function Navbar() {
 
         <div className={`navbar-links${menuOpen ? ' open' : ''}`}>
           <Link to="/farms" className="navbar-link" onClick={() => setMenuOpen(false)}>Browse Farms</Link>
-          <Link to="/#how-it-works" className="navbar-link" onClick={() => setMenuOpen(false)}>How It Works</Link>
+          <button 
+            className="navbar-link" 
+            style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+            onClick={() => {
+              setMenuOpen(false);
+              if (location.pathname === '/') {
+                const el = document.getElementById('how-it-works');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              } else {
+                navigate('/#how-it-works');
+              }
+            }}
+          >
+            How It Works
+          </button>
 
           {user ? (
             <>

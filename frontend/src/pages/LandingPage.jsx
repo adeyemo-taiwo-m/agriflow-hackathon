@@ -16,6 +16,18 @@ export default function LandingPage() {
   const stepsRef = useRef(null);
 
   useEffect(() => {
+    // Scroll to hash on mount or hash change
+    const scrollToHash = () => {
+      if (window.location.hash) {
+        const id = window.location.hash.substring(1);
+        const el = document.getElementById(id);
+        if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+    };
+
+    scrollToHash();
+    window.addEventListener('hashchange', scrollToHash);
+
     const ctx = gsap.context(() => {
       // Hero entrance
       gsap.fromTo('.hero-headline', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out', delay: 0.1 });
@@ -35,7 +47,10 @@ export default function LandingPage() {
         scrollTrigger: { trigger: '.trust-strip', start: 'top 90%' }
       });
     });
-    return () => ctx.revert();
+    return () => {
+      ctx.revert();
+      window.removeEventListener('hashchange', scrollToHash);
+    };
   }, []);
 
   const featuredFarms = mockFarms.slice(0, 3);
@@ -67,8 +82,11 @@ export default function LandingPage() {
             </div>
             <div className="hero-visual">
               <div className="hero-card-preview">
+                <div className="preview-photo" style={{ height: '120px', overflow: 'hidden', borderRadius: 'var(--radius-sm)', marginBottom: '12px' }}>
+                  <img src="/maize.jpg" alt="Maize Farm" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
                 <div className="preview-tag badge badge-active">Maize · Kaduna</div>
-                <div className="preview-name">Oduya Maize Farm</div>
+                <div className="preview-name" style={{ marginTop: '-4px' }}>Oduya Maize Farm</div>
                 <div className="preview-bar-wrap">
                   <div className="progress-track">
                     <div className="progress-fill" style={{ width: '70%' }} />
@@ -129,11 +147,14 @@ export default function LandingPage() {
           <h2 className="section-title">How it works</h2>
           <div className="steps-grid">
             {[
-              { num: '01', title: 'Farmers create projects', desc: 'Farmers submit their farm plan, budget breakdown, and timeline. Our team verifies every application before it goes live.' },
-              { num: '02', title: 'Investors fund milestones', desc: 'Browse verified farms and choose your investment amount. Watch your portfolio grow.' },
-              { num: '03', title: 'Returns at harvest', desc: 'Funds are released in stages only after milestone proofs are submitted and verified. At harvest, returns are calculated and disbursed.' },
+              { num: '01', title: 'Farmers create projects', img: '/maize.jpg', desc: 'Farmers submit their farm plan, budget breakdown, and timeline. Our team verifies every application before it goes live.' },
+              { num: '02', title: 'Investors fund milestones', img: '/rice.jpg', desc: 'Browse verified farms and choose your investment amount. Watch your portfolio grow.' },
+              { num: '03', title: 'Returns at harvest', img: '/tomato.jpg', desc: 'Funds are released in stages only after milestone proofs are submitted and verified. At harvest, returns are calculated and disbursed.' },
             ].map((step) => (
               <div key={step.num} className="step-card card">
+                <div className="step-img-wrap" style={{ height: '140px', margin: '-32px -32px 24px', overflow: 'hidden' }}>
+                  <img src={step.img} alt={step.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
                 <div className="step-num">{step.num}</div>
                 <h3 className="step-title">{step.title}</h3>
                 <p className="step-desc">{step.desc}</p>

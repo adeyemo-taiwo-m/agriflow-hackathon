@@ -4,12 +4,10 @@
 
 // Local farm images moved into `public/images`.
 const localImages = [
-  '/images/1.jpg',
-  '/images/2.jpg',
-  '/images/3.jpg',
-  '/images/4.jpg',
-  '/images/5.jpg',
-  '/images/6.jpg'
+  '/maize.jpg',
+  '/rice.jpg',
+  '/tomato.jpg',
+  '/hero.png'
 ];
 
 function randImage() {
@@ -69,7 +67,7 @@ export const mockFarms = [
     closingDate: '2026-03-14',
     status: 'active',
     description: 'A 5-hectare maize farm operating under the Kaduna State Agricultural Development Programme. We plant an improved hybrid seed variety (SAMMAZ 15) with drip irrigation, targeting a 4.2 tonne/hectare yield. Funds will cover seed, fertilizers, herbicides, labour, and transport to off-takers in Abuja.',
-    photos: pickImages(3),
+    photos: ['/maize.jpg'],
     budget: {
       total: 1200000,
       stages: [
@@ -116,7 +114,7 @@ export const mockFarms = [
     closingDate: '2026-03-25',
     status: 'active',
     description: 'A cooperative of 20 farmers cultivating 10 hectares of paddy rice in the Kebbi State rice belt. With access to the Kainji dam irrigation scheme, we achieve two growing seasons annually. This round funds the second season: seed, fertilizer, harvesting, and milling costs.',
-    photos: pickImages(2),
+    photos: ['/rice.jpg'],
     budget: {
       total: 2000000,
       stages: [
@@ -159,7 +157,7 @@ export const mockFarms = [
     closingDate: '2026-02-01',
     status: 'funded',
     description: 'Three hectares of hybrid tomato planting for Lagos wholesale markets. We use drip irrigation, staking and trellis systems, and integrated pest management. The proximity to Lagos — under 90 minutes — ensures freshness and eliminates cold-chain dependency.',
-    photos: [randImage()],
+    photos: ['/tomato.jpg'],
     budget: {
       total: 800000,
       stages: [
