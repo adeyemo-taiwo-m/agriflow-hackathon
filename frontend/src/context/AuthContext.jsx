@@ -16,7 +16,12 @@ export const AuthProvider = ({ children }) => {
       }
       setUser(fetchedUser);
     } catch (err) {
-      setUser(null);
+      const status = err?.response?.status;
+
+      // Keep current session on transient failures (timeouts/network/5xx).
+      if (status === 401 || status === 403) {
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }

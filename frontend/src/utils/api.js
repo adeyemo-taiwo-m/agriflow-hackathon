@@ -102,8 +102,13 @@ api.interceptors.response.use(
       } catch (err) {
         processQueue(err, null);
         isRefreshing = false;
-        hasRefreshFailed = true;
-        redirectToAuthOnce();
+        const refreshStatus = err?.response?.status;
+
+        // Only force logout when backend explicitly says the session is invalid.
+        if (refreshStatus === 401 || refreshStatus === 403) {
+          hasRefreshFailed = true;
+          redirectToAuthOnce();
+        }
         return Promise.reject(err);
       }
     }
