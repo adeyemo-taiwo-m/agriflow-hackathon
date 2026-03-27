@@ -1,6 +1,8 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { mockExpectedPayoutsExpanded } from '../data/mockData';
 import Footer from '../components/Footer';
+import Icon from '../components/Icon';
+import { formatCurrency } from '../utils/format';
 
 export default function InvestmentDetails() {
   const { id } = useParams();
@@ -65,7 +67,7 @@ export default function InvestmentDetails() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                   <div>
                     <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>Invested Amount</div>
-                    <div className="text-mono" style={{ fontSize: '24px', fontWeight: 700 }}>₦{investment.investedAmount.toLocaleString()}</div>
+                    <div className="text-mono" style={{ fontSize: '24px', fontWeight: 700 }}>{formatCurrency(investment.investedAmount)}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>Expected {investment.returnType === 'cash' ? 'Return' : 'Harvest Share'}</div>
@@ -92,7 +94,7 @@ export default function InvestmentDetails() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: '1px solid var(--color-border)', borderRadius: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '20px' }}>📄</span>
+                      <Icon name="reviews" size={20} />
                       <div>
                         <div style={{ fontWeight: 500, fontSize: '14px' }}>Investment Agreement.pdf</div>
                         <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Signed on Jan 12, 2026</div>
@@ -103,7 +105,7 @@ export default function InvestmentDetails() {
                   {investment.statusStep === 5 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: '1px solid var(--color-border)', borderRadius: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ fontSize: '20px' }}>🧾</span>
+                        <Icon name="payments" size={20} />
                         <div>
                           <div style={{ fontWeight: 500, fontSize: '14px' }}>Payout Receipt.pdf</div>
                           <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Generated on {new Date().toLocaleDateString()}</div>
@@ -154,7 +156,7 @@ export default function InvestmentDetails() {
                           // border: isCurrent ? '2px solid var(--color-primary)' : 'none',
                           color: (isCompleted || isCurrent) ? '#fff' : 'var(--color-text-secondary)'
                         }}>
-                          {isCompleted ? '✓' : t.step}
+                          {isCompleted ? <Icon name="milestones" size={16} /> : t.step}
                         </div>
                         
                         <div style={{ fontWeight: isCurrent ? 600 : 500, color: isCompleted || isCurrent ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', marginBottom: '4px' }}>

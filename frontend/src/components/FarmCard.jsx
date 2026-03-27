@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useRef, useEffect } from 'react';
 import gsap from 'gsap';
+import { formatCurrency } from '../utils/format';
 
 export default function FarmCard({ farm }) {
   const cardRef = useRef(null);
@@ -10,7 +11,7 @@ export default function FarmCard({ farm }) {
   const goal = farm.total_budget !== undefined ? farm.total_budget : (farm.goal || 1200000);
   const percentFunded = Math.min(100, Math.round((raised / goal) * 100));
   
-  const formatCurrency = (n) => `₦${(n / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`;
+
 
   const getTrustBadge = (tier) => {
     const t = (tier || '').toLowerCase();
@@ -69,11 +70,11 @@ export default function FarmCard({ farm }) {
         <div className="farm-card-stats">
           <span>Target Yield: <strong>{farm.expected_yield || farm.expectedYield || '—'} {farm.yieldUnit || (farm.crop_name === 'Poultry' ? 'birds' : 'tons')}</strong></span>
           <span style={{ 
-            color: daysLeft <= 7 ? '#f59e0b' : 'var(--color-text-secondary)', 
-            fontWeight: daysLeft <= 7 ? 700 : 500,
+            color: percentFunded >= 100 ? 'var(--color-primary)' : (daysLeft <= 7 ? '#f59e0b' : 'var(--color-text-secondary)'), 
+            fontWeight: (percentFunded >= 100 || daysLeft <= 7) ? 700 : 500,
             fontSize: '12px'
           }}>
-             {daysLeft > 0 ? `${daysLeft} days left` : 'Funding Closed'}
+             {percentFunded >= 100 ? 'Fully Funded' : (daysLeft > 0 ? `${daysLeft} days left` : 'Funding Closed')}
           </span>
         </div>
 

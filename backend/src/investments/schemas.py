@@ -13,10 +13,13 @@ class InvestmentVerifyInput(BaseModel):
 class CheckoutParamsOut(BaseModel):
     txn_ref: str
     amount_kobo: int
+    actual_amount_kobo: int
     merchant_code: str
     payment_item_id: str
     customer_email: str
     customer_name: str
+    is_test_mode_scaled: bool = False
+    scale_factor: int = 1
 
 class InvestmentOut(BaseModel):
     id: uuid.UUID

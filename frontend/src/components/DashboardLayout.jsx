@@ -59,7 +59,7 @@ export default function DashboardLayout({ navItems, activeTab, onTabChange, bran
             className={`dashboard-nav-item${activeTab === item.key ? ' active' : ''}`}
             onClick={() => handleTabChange(item.key)}
           >
-            <Icon name={item.icon} />
+            <Icon name={item.icon} size={20} />
             <span>{item.label}</span>
           </div>
         ))}

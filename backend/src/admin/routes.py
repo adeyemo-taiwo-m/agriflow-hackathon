@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, status
+from fastapi.encoders import jsonable_encoder
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.main import get_session
 from src.utils.dependencies import get_current_admin
@@ -62,7 +63,7 @@ async def reject_farm(
         "data": farm_data
     }
 
-@admin_router.get("/milestones/pending", response_model=AdminMilestoneListResponse, status_code=status.HTTP_200_OK)
+@admin_router.get("/milestones/pending", status_code=status.HTTP_200_OK)
 async def get_pending_milestones(
     session: AsyncSession = Depends(get_session),
     admin = Depends(get_current_admin),
@@ -72,10 +73,10 @@ async def get_pending_milestones(
     return {
         "success": True,
         "message": "Pending milestones retrieved successfully",
-        "data": milestones_data
+        "data": jsonable_encoder(milestones_data)
     }
 
-@admin_router.post("/milestones/{id}/approve", response_model=AdminMilestoneResponse, status_code=status.HTTP_200_OK)
+@admin_router.post("/milestones/{id}/approve", status_code=status.HTTP_200_OK)
 async def approve_milestone(
     id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
@@ -86,10 +87,10 @@ async def approve_milestone(
     return {
         "success": True,
         "message": "Milestone verified successfully",
-        "data": milestone_data
+        "data": jsonable_encoder(milestone_data)
     }
 
-@admin_router.post("/milestones/{id}/disburse", response_model=AdminMilestoneResponse, status_code=status.HTTP_200_OK)
+@admin_router.post("/milestones/{id}/disburse", status_code=status.HTTP_200_OK)
 async def disburse_milestone(
     id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
@@ -100,10 +101,10 @@ async def disburse_milestone(
     return {
         "success": True,
         "message": "Milestone disbursed and next stage unlocked",
-        "data": milestone_data
+        "data": jsonable_encoder(milestone_data)
     }
 
-@admin_router.post("/milestones/{id}/reject", response_model=AdminMilestoneResponse, status_code=status.HTTP_200_OK)
+@admin_router.post("/milestones/{id}/reject", status_code=status.HTTP_200_OK)
 async def reject_milestone(
     id: uuid.UUID,
     reject_input: MilestoneRejectInput,
@@ -115,7 +116,7 @@ async def reject_milestone(
     return {
         "success": True,
         "message": "Milestone rejected successfully",
-        "data": milestone_data
+        "data": jsonable_encoder(milestone_data)
     }
 
 @admin_router.get("/stats", response_model=AdminStatsResponse, status_code=status.HTTP_200_OK)
@@ -179,7 +180,7 @@ async def admin_initiate_payouts(
         "data": result
     }
 
-@admin_router.get("/farms", response_model=AdminFarmListResponse, status_code=status.HTTP_200_OK)
+@admin_router.get("/farms", status_code=status.HTTP_200_OK)
 async def get_all_farms(
     session: AsyncSession = Depends(get_session),
     admin = Depends(get_current_admin),
@@ -189,7 +190,40 @@ async def get_all_farms(
     return {
         "success": True,
         "message": "All farms retrieved successfully",
-        "data": farms_data
+        "data": jsonable_encoder(farms_data)
+    }
+
+@admin_router.get("/harvest-reports")
+async def get_harvest_reports(
+    session: AsyncSession = Depends(get_session),
+    admin = Depends(get_current_admin),
+    admin_services: AdminServices = Depends(get_admin_services)
+):
+    data = await admin_services.get_harvest_reports(session)
+    return {"success": True, "message": "Harvest reports retrieved", "data": data}
+
+@admin_router.post("/harvest-reports/{report_id}/verify")
+async def verify_harvest_report(
+    report_id: uuid.UUID,
+    confirmed_sales: float,
+    session: AsyncSession = Depends(get_session),
+    admin = Depends(get_current_admin),
+    admin_services: AdminServices = Depends(get_admin_services)
+):
+    result = await admin_services.verify_harvest_report(report_id, confirmed_sales, session)
+    return {"success": True, "message": result["message"]}
+
+@admin_router.get("/repayments")
+async def get_repayments(
+    session: AsyncSession = Depends(get_session),
+    admin = Depends(get_current_admin),
+    admin_services: AdminServices = Depends(get_admin_services)
+):
+    data = await admin_services.get_repayments(session)
+    return {
+        "success": True,
+        "message": "Repayments retrieved successfully",
+        "data": data
     }
 
 @admin_router.get("/payouts/{farm_id}")
@@ -204,4 +238,17 @@ async def get_farm_payouts(
         "success": True, 
         "message": "payouts retrieved successfully", 
         "data": payouts
+    }
+
+@admin_router.delete("/farms/{id}", status_code=status.HTTP_200_OK)
+async def delete_farm(
+    id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    admin = Depends(get_current_admin),
+    admin_services: AdminServices = Depends(get_admin_services)
+):
+    await admin_services.delete_farm(id, session)
+    return {
+        "success": True,
+        "message": "Farm and all associated data deleted successfully"
     }

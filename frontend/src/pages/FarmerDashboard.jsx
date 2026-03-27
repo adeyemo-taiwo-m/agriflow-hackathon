@@ -12,6 +12,8 @@ import CurrencyInput from '../components/CurrencyInput';
 import Pagination from '../components/Pagination';
 import Loader, { Spinner } from '../components/Loader';
 import Button from '../components/Button';
+import Icon from '../components/Icon';
+import { formatCurrency } from '../utils/format';
 
 const navItems = [
   { key: 'farms', label: 'My Farms', icon: 'farms' },
@@ -69,23 +71,25 @@ function LiveLocationCapture({ onLocationCapture, onClear }) {
       {!preview ? (
         <label style={{ display: "block", cursor: "pointer", textAlign: "center", padding: "12px", borderRadius: "8px", background:'#fff', border:'1px solid var(--color-primary)' }}>
           <input type="file" accept="image/*" capture="environment" onChange={handleCapture} style={{ display: "none" }} />
-          <div className="btn btn-solid btn-sm" style={{ pointerEvents:'none' }}>📷 Capture Location & Photo</div>
+          <div className="btn btn-solid btn-sm" style={{ pointerEvents:'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <Icon name="camera" size={16} /> Capture Location & Photo
+          </div>
         </label>
       ) : (
         <div style={{ display: "flex", gap: "12px", alignItems:'center', background:'#fff', padding:'10px', borderRadius:'8px' }}>
           <img src={preview} alt="Location proof" style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "4px", border:'1px solid var(--color-border)' }} />
           <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
             {location ? (
-              <div style={{ fontSize: "12px", color: "var(--color-primary)", fontWeight: 600 }}>
-                ✓ Location captured ({location.accuracy.toFixed(0)}m accuracy)
+              <div style={{ fontSize: "12px", color: "var(--color-primary)", fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Icon name="milestones" size={14} /> Location captured ({location.accuracy.toFixed(0)}m accuracy)
               </div>
             ) : locationError ? (
-              <div style={{ fontSize: "12px", color: "var(--color-danger)" }}>
-                ✗ {locationError}
+              <div style={{ fontSize: "12px", color: "var(--color-danger)", display: 'flex', alignItems: 'center', gap: '4px' }}>
+                ✕ {locationError}
               </div>
             ) : (
-              <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                ⏳ Acquiring GPS location...
+              <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Icon name="clock" size={14} /> Acquiring GPS location...
               </div>
             )}
             <div style={{marginTop:'4px'}}><button onClick={() => { setPhoto(null); setPreview(null); setLocation(null); setLocationError(null); onClear(); }} className="btn-link" style={{ fontSize: "12px", padding:0 }}>Retake</button></div>
@@ -251,7 +255,7 @@ function FarmCreationForm({ onDone }) {
                 {(ref ? ref.states : nigeriaStates).map(s=><option key={s}>{s}</option>)}
               </select>
               {ref && data.state && !ref.states.includes(data.state) && (
-                <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px'}}>⚠ {data.crop} is not commonly grown in {data.state}</p>
+                <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px', display:'flex', alignItems: 'center', gap: '4px'}}><Icon name="alert" size={12} /> {data.crop} is not commonly grown in {data.state}</p>
               )}
             </div>
           </div>
@@ -262,11 +266,13 @@ function FarmCreationForm({ onDone }) {
 
           {ref && sz>0 && (
             <div style={{background:'var(--color-primary-light)',border:'1px solid var(--color-primary)',borderRadius:'12px',padding:'16px 20px'}}>
-              <p style={{fontWeight:700,fontSize:'13px',color:'var(--color-primary)',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>🌱 AgriFlow suggests for {data.crop} · {sz} ha</p>
+              <p style={{fontWeight:700,fontSize:'13px',color:'var(--color-primary)',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
+                <Icon name="sprout" size={24} /> AgriFlow suggests for {data.crop} · {sz} ha
+              </p>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px 20px',fontSize:'13px'}}>
-                {[['Budget range',`₦${(ref.costMin*sz).toLocaleString()} – ₦${(ref.costMax*sz).toLocaleString()}`],
+                {[['Budget range',`${formatCurrency(ref.costMin*sz)} – ${formatCurrency(ref.costMax*sz)}`],
                   ['Expected yield',`${ref.yieldMin*sz} – ${ref.yieldMax*sz} ${ref.unit}`],
-                  ['Revenue estimate',`₦${(revMin/1000).toFixed(0)}k – ₦${(revMax/1000000).toFixed(1)}M`],
+                  ['Revenue estimate',`${formatCurrency(revMin)} – ${formatCurrency(revMax)}`],
                   ['Growing period',`${ref.monthsMin} – ${ref.monthsMax} months`],
                   ['Max return rate',`${ref.maxReturn}%`],
                 ].map(([l,v])=>(
@@ -288,7 +294,7 @@ function FarmCreationForm({ onDone }) {
           <h3 className="fstitle">Budget Breakdown</h3>
           {ref && sz>0 && (
             <div style={{padding:'10px 14px',background:'var(--color-primary-light)',borderRadius:'8px',fontSize:'13px',color:'var(--color-primary)',marginBottom:'4px'}}>
-              Reference budget: <strong>₦{(ref.costMin*sz).toLocaleString()} – ₦{(ref.costMax*sz).toLocaleString()}</strong> for {sz}ha of {data.crop}
+              Reference budget: <strong>{formatCurrency(ref.costMin*sz)} – {formatCurrency(ref.costMax*sz)}</strong> for {sz}ha of {data.crop}
             </div>
           )}
           <div className="form-group">
@@ -300,7 +306,7 @@ function FarmCreationForm({ onDone }) {
                 setData(p=>({...p,totalBudget:v,stages:ref.milestones.map(m=>({name:m.name,amount:Math.round(b*m.pct/100).toString(),locked:true}))}));
               }
             }} placeholder="e.g. 400000"/>
-            {budgetWarn && <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px'}}>⚠ Exceeds reference max by &gt;20% for this crop and farm size</p>}
+            {budgetWarn && <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px', display:'flex', alignItems: 'center', gap: '4px'}}><Icon name="alert" size={12} /> Exceeds reference max by &gt;20% for this crop and farm size</p>}
           </div>
 
           {ref ? (
@@ -328,7 +334,7 @@ function FarmCreationForm({ onDone }) {
                 ))}
                 <button className="btn-link" onClick={()=>setData(p=>({...p,stages:[...p.stages,{name:'',amount:''}]}))}>+ Add Stage</button>
               </div>
-              {stageMismatch && <div style={{padding:'10px 14px',background:'var(--color-accent-light)',borderRadius:'8px',fontSize:'13px',color:'var(--color-accent)'}}>⚠ Stage totals (₦{stageTotal.toLocaleString()}) don't match budget (₦{totalBudget.toLocaleString()})</div>}
+              {stageMismatch && <div style={{padding:'10px 14px',background:'var(--color-accent-light)',borderRadius:'8px',fontSize:'13px',color:'var(--color-accent)', display:'flex', alignItems: 'center', gap: '6px'}}><Icon name="alert" size={12} /> Stage totals (₦{stageTotal.toLocaleString()}) don't match budget (₦{totalBudget.toLocaleString()})</div>}
             </>
           )}
 
@@ -356,7 +362,7 @@ function FarmCreationForm({ onDone }) {
               </label>
               <input className="form-input" type="number" value={data.expectedYield} onChange={e=>u('expectedYield',e.target.value)} placeholder={ref&&sz?`e.g. ${((ref.yieldMin+ref.yieldMax)/2*sz).toFixed(1)}`:'e.g. 4.2'}/>
               {ref && sz>0 && parseFloat(data.expectedYield)>ref.yieldMax*sz*1.3 && (
-                <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px'}}>⚠ Exceeds reference max yield for this farm size</p>
+                <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px', display:'flex', alignItems: 'center', gap: '4px'}}><Icon name="alert" size={12} /> Exceeds reference max yield for this farm size</p>
               )}
             </div>
             <div className="form-group"><label className="form-label">Sale Price per {ref?.unit||'ton'} (₦)
@@ -371,7 +377,7 @@ function FarmCreationForm({ onDone }) {
             </label>
             <input className="form-input text-mono" type="number" max={ref?.maxReturn} value={data.returnRate} onChange={e=>u('returnRate',e.target.value)} placeholder={`e.g. ${ref?.maxReturn||15}`}/>
             {ref && parseFloat(data.returnRate)>ref.maxReturn && (
-              <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px'}}>⚠ Exceeds the maximum allowed return for {data.crop} ({ref.maxReturn}%). AgriFlow only allows data-backed returns.</p>
+              <p style={{fontSize:'12px',color:'var(--color-danger)',marginTop:'4px', display:'flex', alignItems: 'center', gap: '4px'}}><Icon name="alert" size={12} /> Exceeds the maximum allowed return for {data.crop} ({ref.maxReturn}%). AgriFlow only allows data-backed returns.</p>
             )}
           </div>
         </div>
@@ -401,7 +407,7 @@ function FarmCreationForm({ onDone }) {
 
           <div className="form-group" style={{marginTop:'8px'}}>
             <label className="form-label">Display Photos (for Investors)</label>
-            <div {...getRootProps()} className="dropzone"><input {...getInputProps()}/><span className="dropzone-inner">📎 Drag photos here or click to browse</span></div>
+            <div {...getRootProps()} className="dropzone"><input {...getInputProps()}/><span className="dropzone-inner" style={{display:'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}><Icon name="add" size={16} /> Drag photos here or click to browse</span></div>
             {data.photos.length > 0 && (
               <div style={{display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'12px'}}>
                 {data.photos.map((file, i) => (
@@ -538,7 +544,7 @@ function ProofUpload({ milestone, onSuccess }) {
               fontSize: '15px',
               fontWeight: 600
             }}>
-              📷 Take Photo
+              <Icon name="camera" size={16} /> Take Photo
             </div>
           </label>
           <p style={{ fontSize: "13px", color: "var(--color-primary)", marginTop: '12px', fontWeight: 500 }}>
@@ -551,16 +557,16 @@ function ProofUpload({ milestone, onSuccess }) {
             <img src={preview} alt="Proof preview" style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "8px", border:'1px solid var(--color-border)' }} />
             <div style={{ flex: 1 }}>
               {location ? (
-                <div style={{ fontSize: "13px", color: "var(--color-primary)", fontWeight: 600 }}>
-                  ✓ Location captured ({location.accuracy.toFixed(0)}m accuracy)
+                <div style={{ fontSize: "13px", color: "var(--color-primary)", fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Icon name="milestones" size={14} /> Location captured ({location.accuracy.toFixed(0)}m accuracy)
                 </div>
               ) : locationError ? (
-                <div style={{ fontSize: "13px", color: "var(--color-danger)" }}>
-                  ✗ {locationError}
+                <div style={{ fontSize: "13px", color: "var(--color-danger)", display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  ✕ {locationError}
                 </div>
               ) : (
-                <div style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                  ⏳ Acquiring GPS location...
+                <div style={{ fontSize: "13px", color: "var(--color-text-secondary)", display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Icon name="clock" size={14} /> Acquiring GPS location...
                 </div>
               )}
               <button onClick={() => { setPhoto(null); setPreview(null); setLocation(null); setLocationError(null); }} className="btn-link" style={{ fontSize: "12px", padding: 0, marginTop: '4px' }}>Retake Photo</button>
@@ -622,7 +628,6 @@ function MilestonesTab() {
       // SILENT REFRESH: Only poll if the tab is visible and we ARE NOT currently uploading a proof
       // We check for any active upload state in the document if possible, or just the tab focus.
       if (document.visibilityState === 'visible') {
-        // We use a silent version of loadMilestones that doesn't trigger the global spinner
         api.get(`/farms/${selectedFarmId}`).then(res => {
           setMilestones(res.data.data.milestones || []);
         }).catch(() => {}); // Fail silently in background
@@ -797,7 +802,7 @@ function MilestonesTab() {
                       color: '#1a5d3b',
                       fontWeight: 500
                     }}>
-                      ✓ Approved <span style={{opacity: 0.6, fontSize: '11px', borderLeft: '1px solid rgba(26, 93, 59, 0.3)', paddingLeft: '8px', marginLeft: '2px'}}>— GPS verified.</span>
+                      <Icon name="milestones" size={16} /> Approved <span style={{opacity: 0.6, fontSize: '11px', borderLeft: '1px solid rgba(26, 93, 59, 0.3)', paddingLeft: '8px', marginLeft: '2px'}}>— GPS verified.</span>
                     </div>
                   )}
                   {m.status === 'disbursed' && (
@@ -873,7 +878,7 @@ function MilestonesTab() {
                 gap:'12px',
                 lineHeight: 1.5
               }}>
-                <span style={{fontSize: '16px'}}>🔒</span> This stage is locked. It will be available once previous milestones are verified and funds are disbursed.
+                                <span style={{fontSize: '16px'}}>🔒</span> This stage is locked. It will be available once previous milestones are verified and funds are disbursed.
               </div>
             )}
           </div>
@@ -883,46 +888,155 @@ function MilestonesTab() {
   );
 }
 
-function HarvestTab({ farms }) {
+function HarvestTab() {
   const { addToast } = useToast();
   const [ay, setAy] = useState('');
   const [totalSales, setTotalSales] = useState('');
   const [harvestDate, setHarvestDate] = useState('');
-  const [evidence, setEvidence] = useState(null);
+  const [evidence, setEvidence] = useState([]);
   const [selectedFarmId, setSelectedFarmId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [readyFarms, setReadyFarms] = useState([]);
+  const [loading, setLoading] = useState(true);
   
-  const { getRootProps, getInputProps } = useDropzone({ maxFiles: 1, onDrop: files => setEvidence(files[0]) });
+  const [repaymentDetails, setRepaymentDetails] = useState(null);
+  const [repaymentLoading, setRepaymentLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
-  // Filter farms that are ready for harvest (all milestones disbursed)
-  const readyFarms = (farms || []).filter(f => 
-    f.milestones && f.milestones.length > 0 && f.milestones.every(m => m.status === 'disbursed')
-  );
+  const { getRootProps, getInputProps } = useDropzone({ 
+    multiple: true,
+    onDrop: files => setEvidence(prev => [...(Array.isArray(prev) ? prev : []), ...files]) 
+  });
+
+  const fetchReadyFarms = async () => {
+    try {
+      const res = await api.get('/farms/my-farms/ready-for-harvest');
+      setReadyFarms(res.data.data || []);
+    } catch (err) {
+      console.error('Failed to load harvest-ready farms:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReadyFarms();
+  }, []);
 
   const selectedFarm = readyFarms.find(f => f.id === selectedFarmId);
   const expectedYield = selectedFarm?.expected_yield || 0;
   const variance = ay && expectedYield ? (((parseFloat(ay) - expectedYield) / expectedYield) * 100).toFixed(1) : null;
 
+  const verifiedReport = selectedFarm?.harvest_reports?.find(r => r.status === 'verified');
+  const submittedReport = selectedFarm?.harvest_reports?.find(r => r.status === 'submitted');
+  const isRepaid = selectedFarm?.repayment?.status === 'confirmed';
+
+  useEffect(() => {
+    if (verifiedReport && !isRepaid) {
+      const fetchRepayment = async () => {
+        setRepaymentLoading(true);
+        try {
+          const res = await api.get(`/harvest/farms/${selectedFarmId}/repayment/details`);
+          setRepaymentDetails(res.data);
+        } catch (err) {
+          console.error("Failed to load repayment details:", err);
+        } finally {
+          setRepaymentLoading(false);
+        }
+      };
+      fetchRepayment();
+    } else {
+      setRepaymentDetails(null);
+    }
+  }, [selectedFarmId, verifiedReport, isRepaid]);
+
+  const handleRepay = async () => {
+    if (!selectedFarmId) return;
+    setRepaymentLoading(true);
+    try {
+      const res = await api.post(`/harvest/farms/${selectedFarmId}/repayment/initiate`);
+      const { txn_ref, amount_kobo, merchant_code, payment_item_id, customer_email, customer_name } = res.data.data;
+      
+      const params = {
+        merchant_code,
+        pay_item_id: payment_item_id,
+        txn_ref,
+        amount: amount_kobo,
+        cust_id: customer_email,
+        cust_name: customer_name,
+        cust_email: customer_email,
+        currency: 566,
+        site_redirect_url: window.location.origin,
+        onComplete: async (response) => {
+          if (response.resp === '00' || response.resp === '0' || response.status === 'successful') {
+            await verifyRepayment(txn_ref);
+          } else {
+             addToast('Payment failed or cancelled', 'error');
+             setRepaymentLoading(false);
+          }
+        },
+        mode: 'TEST' // Change to 'PRODUCTION' in live
+      };
+
+      if (window.webpayCheckout) {
+        window.webpayCheckout(params);
+      } else {
+        addToast('Payment gateway not loaded. Please refresh.', 'error');
+        setRepaymentLoading(false);
+      }
+    } catch (err) {
+      addToast(err.response?.data?.detail || "Failed to initiate repayment", "error");
+      setRepaymentLoading(false);
+    }
+  };
+
+  const verifyRepayment = async (txnRef) => {
+    setIsVerifying(true);
+    try {
+      const res = await api.post('/harvest/repayment/verify', { txn_ref: txnRef });
+      if (res.data.data.status === 'confirmed') {
+        addToast('Repayment Confirmed!', 'success', 'Investor payouts have been generated.');
+        // Refresh farms
+        const newFarms = await api.get('/farms/my-farms/ready-for-harvest');
+        setReadyFarms(newFarms.data.data || []);
+      } else {
+        addToast('Verification pending', 'warning', 'Please check back in a few minutes.');
+      }
+    } catch (err) {
+      addToast('Verification failed', 'error');
+    } finally {
+      setIsVerifying(false);
+      setRepaymentLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!selectedFarmId || !ay || !totalSales || !evidence) return;
+    if (!selectedFarmId || !ay || !totalSales || evidence.length === 0) return;
     
     setIsSubmitting(true);
     try {
       const formData = new FormData();
       formData.append('actual_yield', ay);
-      formData.append('total_sales', totalSales);
+      formData.append('total_sales_declared', totalSales.toString().replace(/,/g, ''));
       formData.append('harvest_date', harvestDate);
-      formData.append('evidence', evidence);
       
-      await api.post(`/farms/${selectedFarmId}/harvest-report`, formData, {
+      evidence.forEach(file => {
+        formData.append('payment_evidences', file);
+      });
+      
+      await api.post(`/harvest/farms/${selectedFarmId}/harvest-report`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
       addToast('Harvest report submitted!', 'success', 'Verification step initiated.');
+      
+      // Refresh the list to remove the submitted farm
+      await fetchReadyFarms();
+      
       // Reset form
       setAy('');
       setTotalSales('');
-      setEvidence(null);
+      setEvidence([]); // Reset to empty array
       setSelectedFarmId('');
     } catch (err) {
       addToast(err.response?.data?.message || "Failed to submit harvest report", "error");
@@ -934,9 +1048,80 @@ function HarvestTab({ farms }) {
   if (readyFarms.length === 0) {
     return (
       <div>
-        <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'24px',fontFamily:'var(--font-heading)'}}>Harvest Reports</h1>
-        <div className="card" style={{padding:'40px',textAlign:'center'}}>
-           <p style={{color:'var(--color-text-secondary)',marginBottom:'16px'}}>You don't have any farms ready for harvest reporting yet. All milestones must be disbursed first.</p>
+        <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'8px',fontFamily:'var(--font-heading)'}}>Harvest Reports</h1>
+        <p style={{color:'var(--color-text-secondary)', marginBottom: '24px', fontSize: '14px'}}>Submit reports once your farm cycle is complete.</p>
+        
+        <div className="card" style={{padding:'48px 32px', textAlign:'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px'}}>
+           <div style={{ color: 'var(--color-primary)', opacity: 0.5 }}>
+             <Icon name="harvest" size={48} />
+           </div>
+           <div style={{maxWidth: '400px'}}>
+             <h3 style={{fontWeight: 600, marginBottom: '8px'}}>No Farms Ready for Harvest</h3>
+             <p style={{color:'var(--color-text-secondary)', fontSize: '14px', lineHeight: 1.6}}>
+               Farms appear here automatically once **all** funding milestones have been verified and disbursed. Check your [Milestones](#) tab to track progress.
+             </p>
+           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedFarmId) {
+    return (
+      <div>
+        <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'8px',fontFamily:'var(--font-heading)'}}>Harvest Reports</h1>
+        <p style={{color:'var(--color-text-secondary)', marginBottom: '24px', fontSize: '14px'}}>Track your harvest cycle and settle investor returns.</p>
+        
+        <div style={{display:'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px'}}>
+          {readyFarms.map(farm => {
+            const report = farm.harvest_reports?.[0];
+            const repaid = farm.repayment?.status === 'confirmed';
+            const reportStatus = report?.status;
+
+            let badgeColor = 'var(--color-primary)';
+            let badgeLabel = 'Ready to Report';
+            let badgeBg = 'var(--color-primary-light)';
+            let actionBtn = null;
+
+            if (repaid) {
+              badgeLabel = 'Settled'; badgeBg = 'rgba(16,185,129,0.1)'; badgeColor = '#059669';
+              actionBtn = <div style={{width:'100%', padding:'10px', background:'rgba(16,185,129,0.1)', color:'#059669', borderRadius:'8px', textAlign:'center', fontWeight:600, fontSize:'13px'}}>✓ Repayment Confirmed</div>;
+            } else if (reportStatus === 'verified') {
+              badgeLabel = 'Action Required'; badgeBg = 'rgba(245,158,11,0.1)'; badgeColor = '#d97706';
+              actionBtn = <button className="btn btn-solid btn-sm" style={{width:'100%', background:'#d97706'}} onClick={() => setSelectedFarmId(farm.id)}>💰 Complete Repayment</button>;
+            } else if (reportStatus === 'submitted') {
+              badgeLabel = 'Under Review'; badgeBg = 'rgba(59,130,246,0.1)'; badgeColor = '#3b82f6';
+              actionBtn = <div style={{width:'100%', padding:'10px', background:'rgba(59,130,246,0.08)', color:'#3b82f6', borderRadius:'8px', textAlign:'center', fontSize:'13px'}}>⏳ Report under admin review</div>;
+            } else {
+              actionBtn = <button className="btn btn-solid btn-sm" style={{width:'100%'}} onClick={() => setSelectedFarmId(farm.id)}>Create Report</button>;
+            }
+
+            return (
+              <div key={farm.id} className="card" style={{padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid var(--color-border)'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                  <div style={{width: '48px', height: '48px', borderRadius: '12px', background: badgeBg, color: badgeColor, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                    <Icon name="harvest" size={24} />
+                  </div>
+                  <span style={{padding:'4px 10px', borderRadius:'99px', fontSize:'11px', fontWeight:600, background:badgeBg, color:badgeColor}}>{badgeLabel}</span>
+                </div>
+                <div>
+                  <h3 style={{fontWeight: 600, fontSize: '18px'}}>{farm.name}</h3>
+                  <p style={{fontSize: '13px', color: 'var(--color-text-secondary)'}}>{farm.crop_name} · {farm.state}</p>
+                </div>
+                <div style={{padding: '12px', background: 'var(--color-surface)', borderRadius: '8px', fontSize: '12px'}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '4px'}}>
+                    <span>Expected Yield:</span>
+                    <strong>{farm.expected_yield} {farm.crop_name === 'Poultry' ? 'birds' : 'tons'}</strong>
+                  </div>
+                  <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                    <span>Cycle Start:</span>
+                    <strong>{new Date(farm.start_date).toLocaleDateString()}</strong>
+                  </div>
+                </div>
+                {actionBtn}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -944,61 +1129,211 @@ function HarvestTab({ farms }) {
 
   return (
     <div>
-      <h1 style={{fontSize:'26px',fontWeight:700,marginBottom:'24px',fontFamily:'var(--font-heading)'}}>Harvest Report</h1>
-      <div className="card" style={{padding:'28px',maxWidth:'560px',display:'flex',flexDirection:'column',gap:'16px'}}>
-        <div className="form-group">
-          <label className="form-label">Select Ready Farm</label>
-          <select className="form-input form-select" value={selectedFarmId} onChange={e=>setSelectedFarmId(e.target.value)}>
-             <option value="">-- Choose Farm --</option>
-             {readyFarms.map(f => <option key={f.id} value={f.id}>{f.name} ({f.crop_name})</option>)}
-          </select>
+      <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px'}}>
+        <button onClick={() => setSelectedFarmId('')} className="btn-ghost" style={{padding: '8px', borderRadius: '8px'}}><Icon name="farms" size={20} /></button>
+        <div>
+          <h1 style={{fontSize:'24px',fontWeight:700,fontFamily:'var(--font-heading)'}}>Harvest Report</h1>
+          <p style={{color:'var(--color-text-secondary)', fontSize:'14px'}}>{selectedFarm.name} · {selectedFarm.crop_name}</p>
         </div>
+      </div>
 
-        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:'12px'}}>
-          <div className="form-group">
-            <label className="form-label">Actual Yield ({selectedFarm?.crop_name === 'Poultry' ? 'birds' : 'tons'})</label>
-            <input className="form-input" type="number" value={ay} onChange={e=>setAy(e.target.value)} placeholder={`Expected: ${expectedYield}`}/>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Unit</label>
-            <input className="form-input" value={selectedFarm?.crop_name === 'Poultry' ? 'birds' : 'tons'} disabled />
-          </div>
-        </div>
+      <div className="card" style={{padding:'28px',maxWidth:'600px',display:'flex',flexDirection:'column',gap:'20px'}}>
+        {verifiedReport ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ padding: '20px', background: 'var(--color-primary-light)', borderRadius: '12px', border: '1px solid var(--color-primary-light)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-primary)', marginBottom: '8px' }}>
+                <Icon name="milestones" size={20} />
+                <h3 style={{ fontWeight: 700, fontSize: '16px', margin: 0 }}>Report Verified</h3>
+              </div>
+              <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--color-text-secondary)' }}>
+                Your harvest report has been verified by the platform. You are now required to settle the total investment plus the agreed ROI.
+              </p>
+            </div>
+            
+            <div style={{ background: 'var(--color-surface)', padding: '16px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Repayment Summary</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '4px' }}>
+                <span>Actual Yield:</span>
+                <strong>{verifiedReport.actual_yield} units</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                <span>Confirmed Sales:</span>
+                <strong>₦{verifiedReport.admin_confirmed_sales?.toLocaleString()}</strong>
+              </div>
+            </div>
 
-        <div className="form-group">
-          <label className="form-label">Total Sales (₦)</label>
-          <CurrencyInput className="form-input text-mono" value={totalSales} onChange={e => setTotalSales(e.target.value)} placeholder="e.g. 950,000"/>
-        </div>
+            {repaymentDetails?.is_test_mode_scaled && (
+              <div style={{ padding:'12px', background: 'rgba(26,107,60,0.05)', borderLeft: '3px solid var(--color-primary)', borderRadius: '4px', marginBottom: '16px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--color-primary)', fontWeight: 600, marginBottom: '4px' }}>
+                  🚀 Smart Scaling Active (Hackathon Mode)
+                </p>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+                  Your total settlement of <strong>₦{(repaymentDetails.total_repayment).toLocaleString()}</strong> exceeds the sandbox limit. 
+                  The gateway will process <strong>₦{repaymentDetails.scaled_repayment.toLocaleString()}</strong> ({repaymentDetails.scale_factor}x scale), but your full repayment will be recorded.
+                </p>
+              </div>
+            )}
 
-        <div className="form-group">
-          <label className="form-label">Harvest Completion Date</label>
-          <input className="form-input" type="date" value={harvestDate} onChange={e => setHarvestDate(e.target.value)}/>
-        </div>
-        
-        <div className="form-group">
-          <label className="form-label">Sales Evidence (Receipt/Bank Alert) <span style={{color:'var(--color-danger)'}}>*</span></label>
-          <div {...getRootProps()} style={{border:'2px dashed var(--color-border)',padding:'20px',borderRadius:'8px',textAlign:'center',cursor:'pointer',background:evidence?'var(--color-primary-light)':'transparent',borderColor:evidence?'var(--color-primary)':'var(--color-border)'}}>
-            <input {...getInputProps()}/>
-            {evidence ? (
-              <span style={{color:'var(--color-primary)',fontWeight:500}}>✓ {evidence.name} attached</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--color-border)' }}>
+                 <span style={{ color: 'var(--color-text-secondary)' }}>Principal (Raised Amount)</span>
+                 <strong className="text-mono">{formatCurrency(repaymentDetails?.principal || 0)}</strong>
+               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--color-border)' }}>
+                 <span style={{ color: 'var(--color-text-secondary)' }}>Interest / ROI ({((repaymentDetails?.roi_rate || 0) * 100).toFixed(1)}%)</span>
+                 <strong className="text-mono" style={{ color: 'var(--color-primary)' }}>+{formatCurrency(repaymentDetails?.gain || 0)}</strong>
+               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 0', marginTop: '4px' }}>
+                 <span style={{ fontWeight: 600, fontSize: '16px' }}>Total Settlement</span>
+                 <strong className="text-mono" style={{ fontSize: '20px', color: 'var(--color-text-primary)' }}>{formatCurrency(repaymentDetails?.total_repayment || 0)}</strong>
+               </div>
+            </div>
+
+            {isRepaid ? (
+              <div style={{ padding: '16px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-primary)', borderRadius: '8px', textAlign: 'center', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <Icon name="milestones" size={18} /> Repayment Confirmed & Settled
+              </div>
             ) : (
-              <span style={{fontSize:'13px',color:'var(--color-text-secondary)'}}>📎 Upload bank alert or receipt photo</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <button 
+                  className="btn btn-solid" 
+                  style={{ width: '100%', padding: '14px', fontSize: '15px' }} 
+                  disabled={repaymentLoading || !repaymentDetails}
+                  onClick={handleRepay}
+                >
+                  {repaymentLoading ? <Spinner size="sm" /> : `Pay ${formatCurrency(repaymentDetails?.total_repayment || 0)}`}
+                </button>
+                <p style={{ fontSize: '11px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+                  Securely processed by Interswitch. Immediate investor payouts will be triggered.
+                </p>
+              </div>
             )}
           </div>
-          <p style={{fontSize:'11px',color:'var(--color-text-secondary)',marginTop:'6px'}}>Required to verify harvest proceeds before investor payout.</p>
-        </div>
+        ) : submittedReport ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ padding: '20px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#3b82f6', marginBottom: '8px' }}>
+                <Icon name="harvest" size={20} />
+                <h3 style={{ fontWeight: 700, fontSize: '16px', margin: 0 }}>Report Under Review</h3>
+              </div>
+              <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--color-text-secondary)' }}>
+                Your harvest report has been submitted successfully. Our admin team will verify your sales data and confirm the final ROI before you can proceed with repayment.
+              </p>
+            </div>
 
-        {variance !== null && (
-          <div style={{padding:'12px 16px',background:'var(--color-surface)',borderRadius:'8px',fontSize:'13px',display:'flex',gap:'24px',flexWrap:'wrap', border:'1px solid var(--color-border)'}}>
-            <span>Expected: <strong>{expectedYield}</strong></span>
-            <span>Reported: <strong>{ay}</strong></span>
-            <span>Variance: <strong style={{color:parseFloat(variance) > -15 ? 'var(--color-primary)' : 'var(--color-danger)'}}>{variance > 0 ? '+' : ''}{variance}%</strong></span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ background: 'var(--color-surface)', padding: '20px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                 <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '16px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', letterSpacing: '0.05em' }}>Submission Details</div>
+                 
+                 <div style={{ display: 'grid', gap: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>Actual Yield</span>
+                      <strong style={{ fontSize: '15px' }}>{submittedReport.actual_yield} units</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>Declared Sales</span>
+                      <strong style={{ fontSize: '15px', color: 'var(--color-primary)' }}>₦{submittedReport.total_sales_declared.toLocaleString()}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>Harvest Date</span>
+                      <strong style={{ fontSize: '15px' }}>{new Date(submittedReport.harvest_date).toLocaleDateString()}</strong>
+                    </div>
+                 </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Sales Evidence ({submittedReport.payment_evidence_urls?.length || 0})</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px' }}>
+                  {submittedReport.payment_evidence_urls?.map((url, idx) => (
+                    <div key={idx} style={{ width: '100%', height: '120px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                      <img src={url} alt={`Evidence ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button className="btn btn-ghost" style={{ width: '100%' }} onClick={() => setSelectedFarmId('')}>Back to Harvest List</button>
           </div>
-        )}
+        ) : (
+          <>
+            <div style={{padding: '16px', background: 'rgba(57, 102, 57, 0.05)', borderRadius: '12px', border: '1px solid var(--color-primary-light)', fontSize: '13px', lineHeight: 1.5}}>
+               <Icon name="milestones" size={16} /> <strong>Final Verification Step:</strong> Please provide accurate yield and sales data. This will be verified against your uploaded evidence before ROI is settled with investors.
+            </div>
 
-        <button className="btn btn-solid btn-lg" disabled={!selectedFarmId || !ay || !totalSales || !evidence || isSubmitting} onClick={handleSubmit}>
-          {isSubmitting ? 'Submitting...' : 'Submit Harvest Report'}
-        </button>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
+              <div className="form-group">
+                <label className="form-label">Actual Yield ({selectedFarm?.crop_name === 'Poultry' ? 'birds' : 'tons'})</label>
+                <input className="form-input" type="number" value={ay} onChange={e=>setAy(e.target.value)} placeholder={`Expected: ${expectedYield}`}/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Harvest Date</label>
+                <input className="form-input" type="date" value={harvestDate} onChange={e => setHarvestDate(e.target.value)}/>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Total Gross Sales (₦)</label>
+              <CurrencyInput className="form-input text-mono" style={{fontSize: '18px', fontWeight: 700}} value={totalSales} onChange={e => setTotalSales(e.target.value)} placeholder="0.00"/>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'var(--color-text-secondary)',marginTop:'4px'}}>
+                <span>Total amount received from selling this harvest.</span>
+                <span>Expected: <strong>₦{selectedFarm?.expected_revenue?.toLocaleString()}</strong></span>
+              </div>
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">Sales Evidence (Receipts/Bank Alerts) <span style={{color:'var(--color-danger)'}}>*</span></label>
+              <div {...getRootProps()} style={{border:'2px dashed var(--color-border)',padding:'32px 20px',borderRadius:'12px',textAlign:'center',cursor:'pointer',background:evidence.length > 0 ?'rgba(57, 102, 57, 0.05)':'transparent',borderColor:evidence.length > 0 ?'var(--color-primary)':'var(--color-border)', transition: 'all 0.2s ease'}}>
+                <input {...getInputProps()}/>
+                <div style={{marginBottom: '12px', color: evidence.length > 0 ? 'var(--color-primary)' : 'var(--color-text-muted)'}}>
+                  <Icon name="camera" size={32} />
+                </div>
+                {evidence.length > 0 ? (
+                  <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'8px',justifyContent:'center'}}>
+                      {evidence.map((file, idx) => (
+                        <div key={idx} style={{position:'relative',width:'60px',height:'60px',borderRadius:'8px',overflow:'hidden',border:'1px solid var(--color-border)'}}>
+                          <img src={URL.createObjectURL(file)} alt="preview" style={{width:'100%',height:'100%',objectFit:'cover'}} />
+                        </div>
+                      ))}
+                      {/* Add more button */}
+                      <div style={{width:'60px',height:'60px',borderRadius:'8px',border:'2px dashed var(--color-border)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--color-primary)',background:'var(--color-surface)'}}>
+                        <Icon name="add" size={24} />
+                      </div>
+                    </div>
+                    <span style={{color:'var(--color-primary)',fontWeight:600,fontSize:'13px'}}>✓ {evidence.length} file{evidence.length > 1 ? 's' : ''} attached</span>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setEvidence([]); }} style={{border:'none',background:'none',color:'var(--color-danger)',fontSize:'12px',fontWeight:600,cursor:'pointer',opacity:0.7,marginTop:'4px'}}>Clear All</button>
+                  </div>
+                ) : (
+                  <div>
+                    <span style={{fontSize:'14px',fontWeight:500,display:'block',marginBottom:'4px'}}>Click to upload photos or documents</span>
+                    <span style={{fontSize:'12px',color:'var(--color-text-secondary)'}}>PNG, JPG or PDF up to 10MB</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {variance !== null && (
+              <div style={{padding:'16px',background:'var(--color-surface)',borderRadius:'12px',fontSize:'13px',display:'flex',justifyContent: 'space-between', alignItems: 'center', border:'1px solid var(--color-border)'}}>
+                <div style={{display: 'flex', gap: '20px'}}>
+                  <span>Expected: <strong>{expectedYield}</strong></span>
+                  <span>Reported: <strong>{ay}</strong></span>
+                </div>
+                <div style={{display: 'flex', alignItems: 'center', gap: '6px', color:parseFloat(variance) > -15 ? 'var(--color-primary)' : 'var(--color-danger)', fontWeight: 600}}>
+                  {parseFloat(variance) > -15 ? '✓' : '⚠️'}
+                  {variance > 0 ? '+' : ''}{variance}% Variance
+                </div>
+              </div>
+            )}
+
+            <div style={{display: 'flex', gap: '12px', marginTop: '8px'}}>
+              <button className="btn btn-ghost" style={{flex: 1}} onClick={() => setSelectedFarmId('')} disabled={isSubmitting}>Cancel</button>
+              <button className="btn btn-solid" style={{flex: 2}} disabled={!selectedFarmId || !ay || !totalSales || !evidence || isSubmitting} onClick={handleSubmit}>
+                {isSubmitting ? <Spinner size="sm" /> : 'Submit Final Report'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1025,6 +1360,7 @@ export default function FarmerDashboard() {
   const [farmsPage, setFarmsPage] = useState(1);
   const fbStart = (farmsPage - 1) * ITEMS_PER_PAGE;
   const { user, logout, fetchProfile } = useAuth();
+  const { addToast } = useToast();
   const [isKycOpen, setIsKycOpen] = useState(false);
   const [farms, setFarms] = useState([]);
   const [loadingFarms, setLoadingFarms] = useState(true);
@@ -1063,6 +1399,16 @@ export default function FarmerDashboard() {
       }
     };
     init();
+
+    // Auto-refresh every 30 seconds (only if window is focused)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchProfile();
+        fetchFarms();
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const displayFarms = farms;
@@ -1080,6 +1426,17 @@ export default function FarmerDashboard() {
       addToast('Payout details saved!', 'success');
     } catch (err) {
       addToast(err.response?.data?.message || 'Failed to save payout details', 'error');
+    }
+  };
+
+  const handleDeleteFarm = async (farmId) => {
+    if (!window.confirm("Are you sure you want to delete this farm? This action cannot be undone.")) return;
+    try {
+      await api.delete(`/farms/${farmId}`);
+      addToast('Farm deleted', 'success');
+      fetchFarms();
+    } catch (err) {
+      addToast(err.response?.data?.detail || 'Delete failed', 'error');
     }
   };
 
@@ -1264,6 +1621,8 @@ export default function FarmerDashboard() {
                       statusLabel = farm.farm_status?.charAt(0).toUpperCase() + farm.farm_status?.slice(1);
                   }
 
+                  const isReadyForHarvest = farm.is_harvest_ready;
+
                   return (
                     <div key={farm.id} className="card" style={{padding:'20px 24px', opacity:['cancelled','rejected'].includes(farm.farm_status)?0.7:1}}>
                       <div style={{display:'flex',alignItems:'center',gap:'16px',flexWrap:'wrap'}}>
@@ -1272,7 +1631,10 @@ export default function FarmerDashboard() {
                           <p style={{fontSize:'13px',color:'var(--color-text-secondary)'}}>{farm.crop_name} · {farm.state}</p>
                         </div>
                         
-                        <span className={`badge badge-${statusBadge}`}>{statusLabel}</span>
+                        <div style={{display: 'flex', gap: '8px'}}>
+                          <span className={`badge badge-${statusBadge}`}>{statusLabel}</span>
+                          {isReadyForHarvest && <span className="badge badge-active" style={{background: 'var(--color-primary)', color: '#fff', border: 'none'}}>Ready for Harvest</span>}
+                        </div>
                         
                         {showProgress && (
                            <div style={{display:'flex',alignItems:'center',gap:'10px',minWidth:'180px'}}>
@@ -1282,8 +1644,25 @@ export default function FarmerDashboard() {
                         )}
                         
                         <div style={{display:'flex',gap:'8px'}}>
-                          <Link to={`/farms/${farm.id}`} className="btn btn-ghost btn-sm">Manage</Link>
-                          {!['deadline_passed','cancelled','rejected'].includes(farm.status) && (
+                          <button 
+                            className="btn btn-ghost btn-sm" 
+                            onClick={() => {
+                              setTab('milestones');
+                              setSearchParams({ tab: 'milestones', farmId: farm.id });
+                            }}
+                          >
+                            Manage
+                          </button>
+                          
+                          {['draft', 'rejected', 'cancelled'].includes(farm.farm_status) && (
+                            <button className="btn btn-ghost btn-sm" style={{color:'var(--color-danger)'}} onClick={() => handleDeleteFarm(farm.id)}>Delete</button>
+                          )}
+                          
+                          {isReadyForHarvest ? (
+                            <button className="btn btn-solid btn-sm" onClick={() => handleTabChange('harvest')}>
+                              Report Harvest
+                            </button>
+                          ) : !['deadline_passed','cancelled','rejected','completed','paid_out'].includes(farm.farm_status) && (
                             <button className="btn btn-solid btn-sm" onClick={() => {
                               setTab('milestones');
                               setSearchParams({ tab: 'milestones', farmId: farm.id });
@@ -1351,7 +1730,7 @@ export default function FarmerDashboard() {
         )}
 
         {tab==='milestones' && <MilestonesTab farms={farms} />}
-        {tab==='harvest' && <HarvestTab farms={farms} />}
+        {tab==='harvest' && <HarvestTab />}
 
         {tab==='explore' && (
           <div>
@@ -1435,31 +1814,59 @@ export default function FarmerDashboard() {
                 )}
               </div>
                 
-              {/* Payout Details */}
-              <div className="card" style={{ padding: "24px", flex: "1 1 320px", maxWidth: "600px" }}>
-                <h3 style={{ fontWeight: 600, marginBottom: "12px" }}>Payout Details</h3>
-                <p style={{ fontSize: "13px", color: "var(--color-text-secondary)", marginBottom: "20px", lineHeight: 1.5 }}>Where should we send your proceeds when your harvest is sold? Account name must match your BVN.</p>
-                
-                {detailsSaved ? (
-                  <div style={{ padding: "16px", backgroundColor: "var(--color-primary-light)", color: "var(--color-primary-dark)", borderRadius: "8px", marginBottom: "20px", fontSize: "14px", fontWeight: 500, display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: "20px", height: "20px", backgroundColor: "var(--color-primary)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "12px" }}>✓</div> Your details are saved. You'll receive payouts here.
+              <div
+                className="card"
+                style={{ padding: "24px", flex: "1 1 320px", maxWidth: "600px" }}
+              >
+                <h3 style={{ fontWeight: 600, marginBottom: "16px" }}>
+                  Payout Destination
+                </h3>
+                <p
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--color-text-secondary)",
+                    marginBottom: "24px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Proceeds from your farm projects are automatically disbursed to this account. To change these details, update your bank verification.
+                </p>
+
+                {user?.bank_verified ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ padding: '16px', background: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                       <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 600 }}>Bank Name</div>
+                       <div style={{ fontWeight: 600 }}>{banks.find(b => b.code === user.bank_code)?.name || user.bank_code || 'Verified Bank'}</div>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div style={{ padding: '16px', background: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                         <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 600 }}>Account Number</div>
+                         <div className="text-mono" style={{ fontWeight: 700, fontSize: '16px' }}>{user.bank_account_number}</div>
+                      </div>
+                      <div style={{ padding: '16px', background: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                         <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 600 }}>Account Name</div>
+                         <div style={{ fontWeight: 600, fontSize: '14px' }}>{user.bank_account_name}</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', fontSize: '13px', fontWeight: 500, marginTop: '8px' }}>
+                      <Icon name="milestones" size={16} />
+                      Verified for Automated Payouts
+                    </div>
                   </div>
-                ) : null}
-                
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-                  <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Account Name (Must match BVN)</label><input className="form-input" value={payoutDetails.accountName} onChange={e => setPayoutDetails({...payoutDetails, accountName: e.target.value})} placeholder="e.g. Adewale Farming Co." /></div>
-                  <div className="form-group"><label className="form-label">Bank Name</label>
-                    <select className="form-select form-input" value={payoutDetails.bankCode} onChange={e => setPayoutDetails({...payoutDetails, bankCode: e.target.value})}>
-                      <option value="">Select Bank...</option>
-                      {banks.map(b => (
-                        <option key={b.code} value={b.code}>{b.name}</option>
-                      ))}
-                    </select>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '32px 16px', background: 'rgba(57, 102, 57, 0.05)', borderRadius: '12px', border: '1px dashed var(--color-primary)' }}>
+                     <div style={{ color: 'var(--color-primary)', marginBottom: '12px' }}>
+                       <Icon name="bank" size={32} />
+                     </div>
+                     <h4 style={{ fontWeight: 600, marginBottom: '8px' }}>No Verified Destination</h4>
+                     <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
+                       Complete your bank verification to receive farm proceeds.
+                     </p>
+                     <button className="btn btn-solid btn-sm" onClick={() => setIsKycOpen(true)}>Verify Bank Now</button>
                   </div>
-                  <div className="form-group"><label className="form-label">Account Number</label><input className="form-input text-mono" maxLength={10} value={payoutDetails.accountNumber} onChange={e => setPayoutDetails({...payoutDetails, accountNumber: e.target.value})} placeholder="0123456789" /></div>
-                </div>
-                
-                <button className="btn btn-solid" style={{ width: "100%", marginTop: "16px" }} onClick={handleSavePayout} disabled={detailsSaved || !payoutDetails.accountName || !payoutDetails.accountNumber || !payoutDetails.bankCode}>Save Payout Details</button>
+                )}
               </div>
             </div>
           </div>

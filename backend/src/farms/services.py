@@ -8,11 +8,13 @@ from src.farms.schemas import FarmCreate, UploadFarmLocations
 from src.milestones.models import Milestone, MilestoneStatus
 from fastapi import HTTPException, status, UploadFile
 from src.file_upload.services import FileUploadServices, ImageCategory
+from src.harvest.models import HarvestReport, HarvestReportStatus
 from sqlalchemy.exc import DatabaseError
 from src.utils.logger import logger
 from typing import List
 from sqlalchemy.orm import selectinload
 from src.auth.models import User
+from src.harvest.models import HarvestReport
 
 class FarmServices:
 
@@ -121,7 +123,14 @@ class FarmServices:
             await session.commit()
             await session.refresh(new_farm)
             logger.info(f"Step 1: Created farm record {new_farm.id} for farmer {farmer.uid}")
-            return new_farm
+            
+            # Reload with relationships so the response can be fully serialized
+            stmt = select(Farm).where(Farm.id == new_farm.id).options(
+                selectinload(Farm.owner),
+                selectinload(Farm.milestones)
+            )
+            result = await session.exec(stmt)
+            return result.one()
         
         except DatabaseError as e:
             logger.error(f"Database error during creation for {farmer.uid}: {str(e)}", exc_info=True)
@@ -201,7 +210,9 @@ class FarmServices:
     async def get_farm_by_id(self, farm_id: uuid.UUID, session: AsyncSession):
         statement = select(Farm).where(Farm.id == farm_id).options(
             selectinload(Farm.milestones).selectinload(Milestone.proofs),
-            selectinload(Farm.owner).selectinload(User.farms)
+            selectinload(Farm.owner).selectinload(User.farms),
+            selectinload(Farm.harvest_reports),
+            selectinload(Farm.repayment)
         )
         result = await session.exec(statement)
         farm = result.first()
@@ -219,11 +230,18 @@ class FarmServices:
             
             is_fully_funded = farm.amount_raised_kobo >= farm.total_budget_kobo
             
-            # Milestone 1: Unlock only if FULLY FUNDED
-            if sorted_ms[0].status == MilestoneStatus.LOCKED and is_fully_funded:
-                sorted_ms[0].status = MilestoneStatus.PENDING_PROOF
-                session.add(sorted_ms[0])
-                updated = True
+            # Milestone 1: Unlock only if FULLY FUNDED, otherwise ensure it's LOCKED
+            if is_fully_funded:
+                if sorted_ms[0].status == MilestoneStatus.LOCKED:
+                    sorted_ms[0].status = MilestoneStatus.PENDING_PROOF
+                    session.add(sorted_ms[0])
+                    updated = True
+            else:
+                # If NOT fully funded, ensure Stage 1 is LOCKED (unless it's already under review/verified, which shouldn't happen)
+                if sorted_ms[0].status == MilestoneStatus.PENDING_PROOF:
+                    sorted_ms[0].status = MilestoneStatus.LOCKED
+                    session.add(sorted_ms[0])
+                    updated = True
             
             # Subsequent Milestones: Unlock only if PREVIOUS is DISBURSED
             for i in range(len(sorted_ms) - 1):
@@ -234,10 +252,15 @@ class FarmServices:
                     next_m.status = MilestoneStatus.PENDING_PROOF
                     session.add(next_m)
                     updated = True
+            
+            # CRITICAL: Reassign sorted list to the relationship so the response is ordered
+            farm.milestones = sorted_ms
                     
         if updated:
             await session.commit()
             await session.refresh(farm)
+            # Re-sort after refresh just in case
+            farm.milestones.sort(key=lambda m: m.order_number)
             
         return farm
     
@@ -257,10 +280,17 @@ class FarmServices:
     async def get_farmer_farms(self, farmer_id: uuid.UUID, session: AsyncSession):
         statement = select(Farm).where(Farm.farmer_id == farmer_id).order_by(Farm.created_at.desc()).options(
             selectinload(Farm.owner).selectinload(User.farms),
-            selectinload(Farm.milestones)
+            selectinload(Farm.milestones).selectinload(Milestone.proofs),
+            selectinload(Farm.harvest_reports),
+            selectinload(Farm.repayment)
         )
         result = await session.exec(statement)
         farms = result.all()
+
+        # Sort milestones by order_number for all farms
+        for farm in farms:
+            if farm.milestones:
+                farm.milestones.sort(key=lambda m: m.order_number)
         
         # Self-healing logic: Ensure milestones progress correctly
         updated = False
@@ -269,11 +299,20 @@ class FarmServices:
                 # Sort milestones by order to iterate sequentially
                 sorted_ms = sorted(farm.milestones, key=lambda m: m.order_number)
                 
-                # Rule 1: First milestone of ACTIVE/FUNDED farm should be unlocked if locked
-                if sorted_ms[0].status == MilestoneStatus.LOCKED:
-                    sorted_ms[0].status = MilestoneStatus.PENDING_PROOF
-                    session.add(sorted_ms[0])
-                    updated = True
+                is_fully_funded = farm.amount_raised_kobo >= farm.total_budget_kobo
+                
+                # Rule 1: First milestone of ACTIVE/FUNDED farm should be unlocked only if fully funded
+                if is_fully_funded:
+                    if sorted_ms[0].status == MilestoneStatus.LOCKED:
+                        sorted_ms[0].status = MilestoneStatus.PENDING_PROOF
+                        session.add(sorted_ms[0])
+                        updated = True
+                else:
+                    # Explicitly RE-LOCK if it was prematurely unlocked
+                    if sorted_ms[0].status == MilestoneStatus.PENDING_PROOF:
+                        sorted_ms[0].status = MilestoneStatus.LOCKED
+                        session.add(sorted_ms[0])
+                        updated = True
                 
                 # Rule 2: If milestone i is DISBURSED, milestone i+1 should be unblocked (if locked)
                 for i in range(len(sorted_ms) - 1):
@@ -281,10 +320,35 @@ class FarmServices:
                         sorted_ms[i+1].status = MilestoneStatus.PENDING_PROOF
                         session.add(sorted_ms[i+1])
                         updated = True
+                
+                # Reassign sorted list
+                farm.milestones = sorted_ms
         
         if updated:
             await session.commit()
-            
+
+        # Compute and persist is_harvest_ready on each farm
+        reports_stmt = select(HarvestReport.farm_id).where(HarvestReport.farmer_id == farmer_id)
+        reports_res = await session.exec(reports_stmt)
+        reported_ids = set(reports_res.all())
+
+        ready_updated = False
+        for farm in farms:
+            already_reported = farm.id in reported_ids
+            eligible_status = farm.farm_status in [FarmStatus.ACTIVE, FarmStatus.FUNDED]
+            has_milestones = bool(farm.milestones)
+            all_disbursed = has_milestones and all(
+                m.status == MilestoneStatus.DISBURSED for m in farm.milestones
+            )
+            new_ready = (not already_reported) and eligible_status and all_disbursed
+            if farm.is_harvest_ready != new_ready:
+                farm.is_harvest_ready = new_ready
+                session.add(farm)
+                ready_updated = True
+
+        if ready_updated:
+            await session.commit()
+
         return farms
     
     async def get_all_farms(self, session: AsyncSession):
@@ -337,3 +401,46 @@ class FarmServices:
                 "optimistic": {"revenue": int(rev_opt_kobo / 100), "payout": int(pool_opt_kobo * stake / 100)}
             }
         }
+
+    async def get_harvest_ready_farms(self, farmer_id: uuid.UUID, session: AsyncSession):
+        statement = select(Farm).where(
+            Farm.farmer_id == farmer_id,
+            Farm.is_harvest_ready == True
+        ).options(
+            selectinload(Farm.owner).selectinload(User.farms),
+            selectinload(Farm.milestones).selectinload(Milestone.proofs),
+            selectinload(Farm.harvest_reports),
+            selectinload(Farm.repayment)
+        )
+        result = await session.exec(statement)
+        return result.all()
+
+    async def delete_farm(self, farm_id: uuid.UUID, farmer_id: uuid.UUID, session: AsyncSession):
+        farm = await session.get(Farm, farm_id)
+        if not farm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found")
+        
+        if farm.farmer_id != farmer_id:
+             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to delete this farm")
+        
+        if farm.farm_status not in [FarmStatus.DRAFT, FarmStatus.REJECTED, FarmStatus.CANCELLED]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail=f"Cannot delete farm in {farm.farm_status} status"
+            )
+
+        # Avoid circular import by importing in method
+        from src.investments.models import Investment
+        inv_stmt = select(Investment).where(Investment.farm_id == farm_id)
+        inv_res = await session.exec(inv_stmt)
+        if inv_res.first():
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Cannot delete farm with existing investments"
+            )
+
+        await session.delete(farm)
+        await session.commit()
+        logger.info(f"Farmer {farmer_id} deleted farm {farm_id}")
+        return True
+

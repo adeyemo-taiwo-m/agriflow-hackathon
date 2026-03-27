@@ -3,6 +3,7 @@ import Modal from './Modal';
 import api from '../utils/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
+import Icon from './Icon';
 
 export default function KYCModal({ isOpen, onClose, role }) {
   const [view, setView] = useState('bvn_input'); // 'bvn_input' | 'bvn_score' | 'bank_input' | 'complete'
@@ -85,6 +86,7 @@ export default function KYCModal({ isOpen, onClose, role }) {
         trust_tier: payload.trust_tier ?? prev.trust_tier
       }));
 
+      await fetchProfile(); // Ensure all bank fields are updated from backend
       setFinalScoreData(payload);
       setView('complete');
     } catch (err) {
@@ -124,8 +126,8 @@ export default function KYCModal({ isOpen, onClose, role }) {
             <div style={{ fontSize: '42px', fontWeight: 800, color: '#D97706', marginBottom: '8px' }}>
               {bvnScoreData?.trust_score} <span style={{ fontSize: '20px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
             </div>
-            <div style={{ background: '#FEF3C7', color: '#D97706', padding: '6px 14px', borderRadius: '20px', display: 'inline-block', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
-              ⭐ {bvnScoreData?.trust_tier}
+            <div style={{ background: '#FEF3C7', color: '#D97706', padding: '6px 14px', borderRadius: '20px', display: 'inline-block', fontSize: '12px', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', margin: '0 auto 16px' }}>
+              <Icon name="star" size={18} /> {bvnScoreData?.trust_tier}
             </div>
             <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
               Add your bank account to boost your score and unlock full access.
@@ -198,13 +200,13 @@ export default function KYCModal({ isOpen, onClose, role }) {
                 <div style={{ fontSize: '36px', fontWeight: 800, color: '#10B981', marginBottom: '4px' }}>
                   {finalScoreData?.trust_score} <span style={{ fontSize: '18px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ 100</span>
                 </div>
-                <div style={{ background: '#D1FAE5', color: '#059669', padding: '6px 14px', borderRadius: '20px', display: 'inline-block', fontSize: '12px', fontWeight: 600 }}>
-                  ⭐ {finalScoreData?.trust_tier}
+                <div style={{ background: '#D1FAE5', color: '#059669', padding: '6px 14px', borderRadius: '20px', display: 'inline-block', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', margin: '0 auto' }}>
+                  <Icon name="star" size={18} /> {finalScoreData?.trust_tier}
                 </div>
               </>
             )}
-            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '20px', lineHeight: 1.4 }}>
-              🎉 Verification fully complete for access!
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '20px', lineHeight: 1.4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <Icon name="milestones" size={20} /> Verification fully complete for access!
             </p>
           </div>
           <button className="btn btn-solid" style={{ width: '100%', background: 'var(--color-primary)' }} onClick={onClose}>Go to Dashboard</button>

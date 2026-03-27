@@ -11,6 +11,8 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { mockFarms, mockInvestorPortfolio } from '../data/mockData';
 import api from '../utils/api';
+import { formatCurrency } from '../utils/format';
+import Icon from '../components/Icon';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -108,7 +110,7 @@ function MilestoneTimeline({ milestones }) {
                           <div className="proof-meta">
                             <span className="proof-submitted">Submitted · {new Date(p.submitted_at || p.uploadDate).toLocaleDateString()}</span>
                             <div className={`proof-status ${p.status}`}>
-                               {p.status === 'verified' ? '✓ Verified by Admin' : 'Awaiting Review'}
+                               {p.status === 'approved' ? '✓ Verified by Admin' : p.status === 'rejected' ? '✕ Rejected' : 'Awaiting Review'}
                             </div>
                           </div>
                         </div>
@@ -167,6 +169,7 @@ function InvestmentModal({ farm, isOpen, onClose }) {
   const [step, setStep] = useState(1);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState(null);
+  const [scalingData, setScalingData] = useState(null);
   const { addToast } = useToast();
   const navigate = useNavigate();
 
@@ -188,7 +191,21 @@ function InvestmentModal({ farm, isOpen, onClose }) {
       });
       
       if (res.data.success) {
-        const { txn_ref, amount_kobo, merchant_code, payment_item_id, customer_email, customer_name } = res.data.data;
+        const { 
+          txn_ref, 
+          amount_kobo, 
+          actual_amount_kobo,
+          is_test_mode_scaled,
+          scale_factor,
+          merchant_code, 
+          payment_item_id, 
+          customer_email, 
+          customer_name 
+        } = res.data.data;
+
+        if (is_test_mode_scaled) {
+          setScalingData({ scale_factor, actual_amount_kobo });
+        }
         
         const params = {
           merchant_code,
@@ -253,6 +270,18 @@ function InvestmentModal({ farm, isOpen, onClose }) {
       {step === 1 && (
         <div className="invest-form">
           {error && <div style={{ padding:'12px', background:'rgba(181,74,47,0.06)', borderLeft:'3px solid var(--color-danger)', borderRadius:'4px', color:'var(--color-danger)', fontSize:'13px', marginBottom:'10px' }}>{error}</div>}
+          
+          {scalingData && (
+            <div style={{ padding:'12px', background: 'rgba(26,107,60,0.05)', borderLeft: '3px solid var(--color-primary)', borderRadius: '4px', marginBottom: '10px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--color-primary)', fontWeight: 600, marginBottom: '4px' }}>
+                🚀 Smart Scaling Active (Hackathon Mode)
+              </p>
+              <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+                Your investment of <strong>₦{(scalingData.actual_amount_kobo / 100).toLocaleString()}</strong> exceeds the sandbox limit. 
+                We've scaled it down by <strong>{scalingData.scale_factor}x</strong> for the gateway, but your <strong>full investment</strong> is recorded in our database.
+              </p>
+            </div>
+          )}
           <div className="invest-amount-wrap">
             <span className="invest-currency">₦</span>
             <CurrencyInput
@@ -356,6 +385,8 @@ export default function FarmDetailPage() {
   const [rejecting, setRejecting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const { addToast } = useToast();
+  const [userInvestments, setUserInvestments] = useState([]);
+  const [isInvested, setIsInvested] = useState(false);
 
   const normalizeFarm = (raw) => {
     if (!raw) return null;
@@ -366,6 +397,7 @@ export default function FarmDetailPage() {
     f.name = f.name || 'Unnamed Farm';
     f.cropTag = f.crop_name || f.crop || 'Crop';
     f.status = f.farm_status || f.status || 'active';
+    f.farmer_id = f.farmer_id || f.farmer?.uid;
     
     f.expectedYield = f.expected_yield || 0;
     f.yieldUnit = f.yield_unit || 'tons';
@@ -460,9 +492,30 @@ export default function FarmDetailPage() {
     }
   };
 
+  const fetchUserInvestments = async () => {
+    if (user?.role !== 'investor') return;
+    try {
+      const res = await api.get('/investments');
+      if (res.data.success) {
+        const invs = res.data.data;
+        setUserInvestments(invs);
+        const match = invs.find(i => i.farm_id === id || i.farmId === id);
+        setIsInvested(!!match);
+      }
+    } catch (err) {
+      console.error("Failed to fetch user investments:", err);
+    }
+  };
+
   useEffect(() => {
     fetchFarm();
   }, [id]);
+
+  useEffect(() => {
+    if (user?.role === 'investor') {
+      fetchUserInvestments();
+    }
+  }, [id, user]);
 
   useEffect(() => {
     if (loading || !farmData) return;
@@ -491,9 +544,8 @@ export default function FarmDetailPage() {
   const amountRaised = farm.amount_raised;
   const totalBudget = farm.total_budget;
   const progress = Math.min((amountRaised / totalBudget) * 100, 100);
-  
-  const investment = isInvestor ? mockInvestorPortfolio.find(i => i.farmId === id || (i.farmName === farm.name)) || mockInvestorPortfolio[0] : null;
-  const isInvested = isInvestor && investment;
+
+
 
   const grossProceeds = farm.status === 'funded' || farm.status === 'completed' ? farm.total_budget * 1.5 : 0; // mocked
   const farmerShare = grossProceeds * 0.40;
@@ -554,11 +606,11 @@ export default function FarmDetailPage() {
                 </div>
                 <div className="funding-stats">
                   <div className="funding-stat">
-                    <span className="funding-stat-val text-mono">₦{(amountRaised / 1000000).toFixed(2)}M</span>
+                    <span className="funding-stat-val text-mono">{formatCurrency(amountRaised)}</span>
                     <span className="funding-stat-label">Raised</span>
                   </div>
                   <div className="funding-stat">
-                    <span className="funding-stat-val text-mono">₦{(totalBudget / 1000000).toFixed(2)}M</span>
+                    <span className="funding-stat-val text-mono">{formatCurrency(totalBudget)}</span>
                     <span className="funding-stat-label">Goal</span>
                   </div>
                   <div className="funding-stat">
@@ -629,16 +681,31 @@ export default function FarmDetailPage() {
             </div>
 
             {/* Budget */}
-            <div className="detail-section">
-              <h2 className="detail-section-title">Budget Breakdown</h2>
-              <BudgetChart stages={farm.budget.stages} total={farm.budget.total} />
-            </div>
+            {(isInvested || isAdmin || (isFarmer && farm.farmer_id === user?.uid)) && (
+              <div className="detail-section">
+                <h2 className="detail-section-title">Budget Breakdown</h2>
+                <BudgetChart stages={farm.budget.stages} total={farm.budget.total} />
+              </div>
+            )}
 
             {/* Milestones */}
-            <div className="detail-section">
-              <h2 className="detail-section-title">Milestones</h2>
-              <MilestoneTimeline milestones={farm.milestones} />
-            </div>
+            {(isInvested || isAdmin || (isFarmer && farm.farmer_id === user?.uid)) ? (
+              <div className="detail-section">
+                <h2 className="detail-section-title">Milestones</h2>
+                <MilestoneTimeline milestones={farm.milestones} />
+              </div>
+            ) : (
+              <div className="detail-section">
+                <h2 className="detail-section-title">Milestones</h2>
+                <div className="card" style={{ padding: '32px', textAlign: 'center', background: 'var(--color-card-alt)' }}>
+                   <div style={{ marginBottom: '12px' }}>
+                     <Icon name="lock" size={32} />
+                   </div>
+                   <h3 style={{ fontWeight: 600, marginBottom: '8px' }}>Milestone Progress Locked</h3>
+                   <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>Detailed milestone progress and verification proofs are only visible to confirmed investors of this farm.</p>
+                </div>
+              </div>
+            )}
 
             {/* Farmer Profile */}
             <div className="detail-section">
@@ -668,80 +735,82 @@ export default function FarmDetailPage() {
             </div>
 
             {/* Data-Backed ROI Breakdown (Investor Trust Feature) */}
-            <div className="detail-section">
-              <h2 className="detail-section-title">Data-Backed ROI Breakdown</h2>
-              <div className="card" style={{ padding: '24px', background: '#fdfbfa', border: '1px solid var(--color-primary)' }}>
-                <p style={{ fontSize: '14px', color: 'var(--color-primary)', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '18px' }}>🌱</span> How returns are calculated (based on AgriFlow crop reference data)
-                </p>
-                <div className="roi-grid" style={{ marginBottom: '24px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Farm size</span><span style={{ fontWeight: 500 }}>{farm.location.lga === 'Abeokuta South' ? '3' : '2'} hectares</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Expected yield</span><span style={{ fontWeight: 500 }}>{farm.expectedYield || 0} – {(farm.expectedYield || 0) * 1.5} {farm.yieldUnit}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Est. gross revenue</span><span style={{ fontWeight: 500 }}>₦{(farm.total_budget * 1.2).toLocaleString()} – ₦{(farm.total_budget * 2.5).toLocaleString()}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Production cost</span><span className="text-mono" style={{ fontWeight: 500 }}>₦{farm.total_budget.toLocaleString()}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)', gridColumn: '1 / -1' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Net Investor Pool</span><span className="text-mono" style={{ fontWeight: 500 }}>₦{(farm.total_budget * (1 + farm.return_rate)).toLocaleString()} Maximum</span>
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--color-card)', padding: '20px', borderRadius: '12px' }}>
-                  {isInvested ? (
-                    <div style={{ marginBottom: '16px', display:'flex', alignItems:'center', gap:'10px' }}>
-                      <span className="badge badge-active" style={{ fontSize:'14px', padding:'6px 12px' }}>✓ You are an investor</span>
-                    </div>
-                  ) : null}
-                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {isInvested ? `Based on your investment of ₦${(investment.amount || 0).toLocaleString()}` : 'If you invest ₦50,000'}
+            {(isInvested || !((farm.status === 'funded' || progress >= 100))) && (
+              <div className="detail-section">
+                <h2 className="detail-section-title">Data-Backed ROI Breakdown</h2>
+                <div className="card" style={{ padding: '24px', background: '#fdfbfa', border: '1px solid var(--color-primary)' }}>
+                  <p style={{ fontSize: '14px', color: 'var(--color-primary)', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Icon name="sprout" size={24} /> How returns are calculated (based on AgriFlow crop reference data)
                   </p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    
-                    {(() => {
-                      const calcAmount = isInvested ? (investment.amount || 50000) : 50000;
-                      const expectedReturn = calcAmount * (1 + farm.return_rate);
-                      const consReturn = calcAmount * (1 + (Math.max(farm.return_rate * 100 - 5, 5))/100);
-                      const optReturn = calcAmount * (1 + (farm.return_rate * 100 + Math.min(6, (farm.return_rate * 100)/2))/100);
-                      return (
-                        <>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>Conservative</span>
-                            <div style={{ textAlign: 'right' }}>
-                              <span className="text-mono" style={{ fontSize: '16px', fontWeight: 700, display: 'block' }}>₦{Math.round(consReturn).toLocaleString()}</span>
-                              <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>+{((consReturn/calcAmount - 1)*100).toFixed(1)}%</span>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-primary-light)', padding: '12px', borderRadius: '8px', margin: '4px -12px' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>Expected <span style={{ fontSize: '12px', fontWeight: 400 }}>(Target)</span></span>
-                            <div style={{ textAlign: 'right' }}>
-                              <span className="text-mono" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', display: 'block' }}>₦{Math.round(expectedReturn).toLocaleString()}</span>
-                              <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>+{(farm.return_rate * 100).toFixed(1)}%</span>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>Optimistic</span>
-                            <div style={{ textAlign: 'right' }}>
-                              <span className="text-mono" style={{ fontSize: '16px', fontWeight: 700, display: 'block' }}>₦{Math.round(optReturn).toLocaleString()}</span>
-                              <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>+{((optReturn/calcAmount - 1)*100).toFixed(1)}%</span>
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
+                  <div className="roi-grid" style={{ marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Farm size</span><span style={{ fontWeight: 500 }}>{farm.location.lga === 'Abeokuta South' ? '3' : '2'} hectares</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Expected yield</span><span style={{ fontWeight: 500 }}>{farm.expectedYield || 0} – {(farm.expectedYield || 0) * 1.5} {farm.yieldUnit}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Est. gross revenue</span><span style={{ fontWeight: 500 }}>₦{(farm.total_budget * 1.2).toLocaleString()} – ₦{(farm.total_budget * 2.5).toLocaleString()}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Production cost</span><span className="text-mono" style={{ fontWeight: 500 }}>₦{farm.total_budget.toLocaleString()}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)', gridColumn: '1 / -1' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Net Investor Pool</span><span className="text-mono" style={{ fontWeight: 500 }}>₦{(farm.total_budget * (1 + farm.return_rate)).toLocaleString()} Maximum</span>
+                    </div>
                   </div>
-                </div>
 
-                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '20px', fontStyle: 'italic', lineHeight: 1.5 }}>
-                  * Return estimate is based on AgriFlow’s crop reference data. Actual returns depend on harvest yield and market prices at time of sale. Returns cap out at optimistic scenario; farm profit above this goes to the farmer.
-                </p>
+                  <div style={{ background: 'var(--color-card)', padding: '20px', borderRadius: '12px' }}>
+                    {isInvested ? (
+                      <div style={{ marginBottom: '16px', display:'flex', alignItems:'center', gap:'10px' }}>
+                        <span className="badge badge-active" style={{ fontSize:'14px', padding:'6px 12px' }}>✓ You are an investor</span>
+                      </div>
+                    ) : null}
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      {isInvested ? `Based on your investment of ₦${(investment.amount || 0).toLocaleString()}` : 'If you invest ₦50,000'}
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      
+                      {(() => {
+                        const calcAmount = isInvested ? (investment.amount || 50000) : 50000;
+                        const expectedReturn = calcAmount * (1 + farm.return_rate);
+                        const consReturn = calcAmount * (1 + (Math.max(farm.return_rate * 100 - 5, 5))/100);
+                        const optReturn = calcAmount * (1 + (farm.return_rate * 100 + Math.min(6, (farm.return_rate * 100)/2))/100);
+                        return (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>Conservative</span>
+                              <div style={{ textAlign: 'right' }}>
+                                <span className="text-mono" style={{ fontSize: '16px', fontWeight: 700, display: 'block' }}>₦{Math.round(consReturn).toLocaleString()}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>+{((consReturn/calcAmount - 1)*100).toFixed(1)}%</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-primary-light)', padding: '12px', borderRadius: '8px', margin: '4px -12px' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>Expected <span style={{ fontSize: '12px', fontWeight: 400 }}>(Target)</span></span>
+                              <div style={{ textAlign: 'right' }}>
+                                <span className="text-mono" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', display: 'block' }}>₦{Math.round(expectedReturn).toLocaleString()}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>+{(farm.return_rate * 100).toFixed(1)}%</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>Optimistic</span>
+                              <div style={{ textAlign: 'right' }}>
+                                <span className="text-mono" style={{ fontSize: '16px', fontWeight: 700, display: 'block' }}>₦{Math.round(optReturn).toLocaleString()}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>+{((optReturn/calcAmount - 1)*100).toFixed(1)}%</span>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '20px', fontStyle: 'italic', lineHeight: 1.5 }}>
+                    * Return estimate is based on AgriFlow’s crop reference data. Actual returns depend on harvest yield and market prices at time of sale. Returns cap out at optimistic scenario; farm profit above this goes to the farmer.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Farm Investment Action / Admin Review Block */}
             <div className="card" style={{ padding: '32px', marginTop: '24px', background: 'var(--color-card)', border: '2px solid var(--color-border)' }}>
@@ -753,8 +822,8 @@ export default function FarmDetailPage() {
               
               <div className="detail-sidebar-stats" style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <div>
-                  <strong className="text-mono" style={{ fontSize: '24px' }}>₦{(amountRaised / 1000000).toFixed(2)}M</strong>
-                  <span style={{ fontSize: '14px', color: 'var(--color-text-secondary)', display: 'block' }}>of ₦{(totalBudget / 1000000).toFixed(2)}M goal</span>
+                  <strong className="text-mono" style={{ fontSize: '24px' }}>{formatCurrency(amountRaised)}</strong>
+                  <span style={{ fontSize: '14px', color: 'var(--color-text-secondary)', display: 'block' }}>of {formatCurrency(totalBudget)} goal</span>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <strong className="text-mono" style={{ color: 'var(--color-primary)', fontSize: '24px' }}>{progress.toFixed(0)}%</strong>
@@ -817,8 +886,8 @@ export default function FarmDetailPage() {
                         Complete your KYC to invest
                       </button>
                     ) : (
-                      <button className="btn btn-solid btn-lg" onClick={() => setInvestOpen(true)} disabled={farm.status === 'funded' || farm.daysLeft === 0}>
-                        {farm.status === 'funded' ? 'Fully Funded' : isInvested ? 'Invest More' : 'Invest Now'}
+                      <button className="btn btn-solid btn-lg" onClick={() => setInvestOpen(true)} disabled={farm.status === 'funded' || progress >= 100 || farm.daysLeft === 0}>
+                        {(farm.status === 'funded' || progress >= 100) ? 'Fully Funded' : isInvested ? 'Invest More' : 'Invest Now'}
                       </button>
                     )}
                     <button className="btn btn-ghost btn-lg">Save Farm</button>

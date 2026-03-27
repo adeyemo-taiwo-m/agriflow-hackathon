@@ -3,12 +3,14 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
+import { formatCurrency } from '../utils/format';
 import { mockAdminStats, mockPendingProofs, mockPayoutFarms, mockAllPayouts } from '../data/mockData';
 import DashboardLayout from '../components/DashboardLayout';
 import CurrencyInput from '../components/CurrencyInput';
 import Pagination from '../components/Pagination';
 import LoadingState, { Spinner } from '../components/Loader';
 import Button from '../components/Button';
+import Icon from '../components/Icon';
 
 const baseAdminFarms = [
   { id:'f1', name:'Oduya Maize Farm', farmer:'Emeka Obi', crop:'Maize', total_budget:5000000, amount_raised:3800000, status:'active' },
@@ -36,10 +38,122 @@ const mockUsersExpanded = Array.from({length: 50}).map((_, i) => ({
 }));
 
 
+function HarvestReportCard({ report, onVerify }) {
+  const [loading, setLoading] = useState(false);
+  const [confirmedSales, setConfirmedSales] = useState(report.admin_confirmed_sales || report.total_sales_declared);
+
+  const handleVerify = async () => {
+    setLoading(true);
+    try {
+      await onVerify(report.id, confirmedSales);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isVerified = report.status === 'verified';
+
+  return (
+    <div className="card" style={{ padding: '24px', marginBottom: '20px', borderLeft: isVerified ? '4px solid var(--color-primary)' : '4px solid #f59e0b' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+        <div style={{ flex: '1 1 400px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+            <h3 style={{ fontWeight: 600, fontSize: '18px', margin: 0 }}>{report.farm_name}</h3>
+            <span style={{ 
+              padding: '2px 8px', 
+              borderRadius: '4px', 
+              fontSize: '11px', 
+              fontWeight: 600, 
+              textTransform: 'uppercase',
+              backgroundColor: isVerified ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+              color: isVerified ? 'var(--color-primary)' : '#d97706'
+            }}>
+              {report.status}
+            </span>
+          </div>
+          <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
+            Submitted by <strong>{report.farmer_name}</strong> ({report.farmer_email}) on {new Date(report.harvest_date).toLocaleDateString()}
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', background: 'var(--color-surface)', padding: '16px', borderRadius: '8px' }}>
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Actual Yield</div>
+              <div style={{ fontWeight: 600, fontSize: '15px' }}>{report.actual_yield} units</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Expected: {report.expected_yield}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Declared Sales</div>
+              <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--color-primary)' }}>₦{report.total_sales_declared.toLocaleString()}</div>
+              {report.expected_revenue && (
+                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                  Exp: ₦{report.expected_revenue.toLocaleString()}
+                  <span style={{ 
+                    marginLeft: '4px', 
+                    color: report.total_sales_declared >= report.expected_revenue ? '#059669' : '#dc2626'
+                  }}>
+                    ({((report.total_sales_declared - report.expected_revenue) / report.expected_revenue * 100).toFixed(1)}%)
+                  </span>
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Sale Price</div>
+              <div style={{ fontWeight: 600, fontSize: '15px' }}>
+                ₦{(report.total_sales_declared / (report.actual_yield || 1)).toLocaleString(undefined, {maximumFractionDigits: 0})}/unit
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Target: ₦{report.sale_price_target?.toLocaleString()}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: '0 0 250px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '4px' }}>Verification Evidence ({report.payment_evidence_urls?.length || 0})</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }}>
+            {report.payment_evidence_urls?.map((url, idx) => (
+              <a key={idx} href={url} target="_blank" rel="noopener noreferrer" style={{ width: '100%', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)', display: 'block' }}>
+                <img src={url} alt={`Evidence ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </a>
+            ))}
+          </div>
+          
+          {!isVerified ? (
+            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '11px' }}>Confirm Final Sales (₦)</label>
+                <input 
+                  type="number" 
+                  className="form-input" 
+                  style={{ fontSize: '14px', height: '36px' }}
+                  value={confirmedSales} 
+                  onChange={e => setConfirmedSales(e.target.value)} 
+                />
+              </div>
+              <button 
+                className="btn btn-solid btn-sm" 
+                style={{ width: '100%' }}
+                onClick={handleVerify}
+                disabled={loading}
+              >
+                {loading ? <Spinner size="sm" /> : 'Verify & Set Final ROI'}
+              </button>
+            </div>
+          ) : (
+            <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+               <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600, textTransform: 'uppercase' }}>Confirmed Sales</div>
+               <div style={{ fontWeight: 700, fontSize: '18px', color: 'var(--color-primary)' }}>₦{report.admin_confirmed_sales?.toLocaleString()}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const navItems = [
   { key: 'overview', label: 'Overview', icon: 'overview' },
   { key: 'pending-farms', label: 'Pending Farms', icon: 'explore' },
   { key: 'proofs', label: 'Pending Proofs', icon: 'reviews' },
+  { key: 'harvest-reports', label: 'Harvest Reports', icon: 'harvest' },
   { key: 'payouts', label: 'Payouts', icon: 'payments' },
   { key: 'farms', label: 'All Farms', icon: 'farms' },
   { key: 'users', label: 'Users', icon: 'users' },
@@ -103,7 +217,7 @@ function PendingFarmCard({ farm, onAction }) {
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)' }}>₦{farm.total_budget?.toLocaleString()}</div>
+          <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)' }}>{formatCurrency(farm.total_budget)}</div>
           <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Target Funding</div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
              <Link to={`/farms/${farm.id}`} className="btn btn-ghost btn-sm">View Details</Link>
@@ -221,7 +335,7 @@ function ProofReviewCard({ proof, onAction }) {
                 marginBottom: '12px',
                 fontWeight: rejectionReason.trim().length > 0 && rejectionReason.trim().length < 10 ? 600 : 400
               }}>
-                {rejectionReason.trim().length < 10 ? `Minimum 10 characters required (${rejectionReason.trim().length}/10)` : 'Length requirement met ✓'}
+                {rejectionReason.trim().length < 10 ? `Minimum 10 characters required (${rejectionReason.trim().length}/10)` : <span style={{display:'flex', alignItems:'center', gap:'4px'}}><Icon name="milestones" size={12} /> Length requirement met</span>}
               </p>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <Button size="sm" style={{ background: 'var(--color-danger)', color: '#fff' }} onClick={handleReject} disabled={rejectionReason.trim().length < 10} loading={loading}>Confirm Rejection</Button>
@@ -230,7 +344,7 @@ function ProofReviewCard({ proof, onAction }) {
             </div>
           ) : (
             <div className="review-actions-row">
-              <Button variant="solid" size="sm" style={{ background: 'var(--color-primary)' }} onClick={handleApprove} loading={loading}>✓ Approve Milestone</Button>
+               <Button variant="solid" size="sm" style={{ background: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleApprove} loading={loading}><Icon name="milestones" size={16} /> Approve Milestone</Button>
               <Button variant="ghost" size="sm" style={{ color: 'var(--color-danger)' }} onClick={() => setRejecting(true)} disabled={loading}>✕ Reject</Button>
             </div>
           )}
@@ -248,6 +362,7 @@ export default function AdminDashboard() {
   const [pendingFarms, setPendingFarms] = useState([]);
   const [allFarms, setAllFarms] = useState([]);
   const [proofs, setProofs] = useState([]);
+  const [harvestReports, setHarvestReports] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -296,6 +411,18 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchHarvestReports = async () => {
+    try {
+      const res = await api.get('/admin/harvest-reports');
+      if (res.data.success) {
+        setHarvestReports(res.data.data);
+      }
+    } catch (err) {
+      console.error("Harvest reports fetch failed:", err);
+      setHarvestReports([]);
+    }
+  };
+
   const fetchUsers = async () => {
     try {
       const res = await api.get('/admin/users');
@@ -307,7 +434,15 @@ export default function AdminDashboard() {
 
   const initData = async () => {
     setLoading(true);
-    await Promise.all([fetchStats(), fetchPendingFarms(), fetchPendingProofs(), fetchUsers(), fetchAllFarms()]);
+    await Promise.all([
+      fetchStats(), 
+      fetchPendingFarms(), 
+      fetchPendingProofs(), 
+      fetchHarvestReports(),
+      fetchUsers(), 
+      fetchAllFarms(), 
+      fetchRepayments()
+    ]);
     setLoading(false);
   };
 
@@ -321,6 +456,8 @@ export default function AdminDashboard() {
         fetchStats();
         fetchPendingFarms();
         fetchPendingProofs();
+        fetchUsers();
+        fetchAllFarms();
       }
     }, 30000);
     
@@ -381,10 +518,24 @@ export default function AdminDashboard() {
 
   const [searchUsers, setSearchUsers] = useState('');
   
+  const handleVerifyHarvestReport = async (reportId, confirmedSales) => {
+    try {
+      const res = await api.post(`/admin/harvest-reports/${reportId}/verify?confirmed_sales=${confirmedSales}`);
+      if (res.data.success) {
+        addToast('Harvest report verified successfully', 'success');
+        fetchHarvestReports();
+        fetchRepayments(); // Repayment details might change or new repayment might be ready
+      }
+    } catch (err) {
+      addToast(err.response?.data?.detail || 'Verification failed', 'error');
+    }
+  };
+
   // Payout states
   const [selectedPayoutFarm, setSelectedPayoutFarm] = useState('');
   const [payoutStatusFilter, setPayoutStatusFilter] = useState('all');
   const [payoutsList, setPayoutsList] = useState([]);
+  const [repayments, setRepayments] = useState([]);
   const [batchDrawerOpen, setBatchDrawerOpen] = useState(false);
   
   const fetchPayouts = async (fId) => {
@@ -398,12 +549,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchRepayments = async () => {
+    try {
+      const res = await api.get('/admin/repayments');
+      if (res.data.success) setRepayments(res.data.data);
+    } catch (err) {
+      console.error('Repayments fetch failed:', err);
+    }
+  };
+
   useEffect(() => {
     if (selectedPayoutFarm) {
       fetchPayouts(selectedPayoutFarm);
     }
   }, [selectedPayoutFarm]);
 
+  // Include farms that have completed repayments (status = completed)
   const payoutFarms = allFarms.filter(f => f.status === 'completed' || f.status === 'paid_out');
 
   useEffect(() => {
@@ -418,10 +579,18 @@ export default function AdminDashboard() {
   const [farmsPage, setFarmsPage] = useState(1);
   const [usersPage, setUsersPage] = useState(1);
 
-  const handleBatchPayout = () => {
-    setPayoutsList(prev => prev.map(p => (p.farmId === selectedPayoutFarm && p.status === 'waiting') ? { ...p, status: 'successful' } : p));
-    addToast('Batch payouts initiated successfully', 'success');
-    setBatchDrawerOpen(false);
+  const handleBatchPayout = async () => {
+    if (!selectedPayoutFarm) return;
+    try {
+      await api.post(`/admin/farms/${selectedPayoutFarm}/initiate-payouts`);
+      addToast('Batch payouts initiated successfully', 'success', 'All waiting payouts have been processed.');
+      setBatchDrawerOpen(false);
+      fetchPayouts(selectedPayoutFarm);
+      fetchAllFarms(); // Refresh farm status to PAID_OUT
+      fetchStats();
+    } catch (err) {
+      addToast('Failed to initiate payouts', 'error', err.response?.data?.detail || "An error occurred");
+    }
   };
 
   const handleRetryPayout = (id) => {
@@ -434,8 +603,8 @@ export default function AdminDashboard() {
     u.email?.toLowerCase().includes(searchUsers.toLowerCase())
   );
 
-  // Payouts Pagination Logic
-  const filteredPayouts = payoutsList.filter(p => p.farmId === selectedPayoutFarm && (payoutStatusFilter === 'all' || p.status === payoutStatusFilter));
+  // Payouts Pagination Logic - backend already scopes payouts to the selected farm
+  const filteredPayouts = payoutsList.filter(p => payoutStatusFilter === 'all' || p.status === payoutStatusFilter);
   const pbStart = (payoutsPage - 1) * ITEMS_PER_PAGE;
   const paginatedPayouts = filteredPayouts.slice(pbStart, pbStart + ITEMS_PER_PAGE);
 
@@ -494,7 +663,7 @@ export default function AdminDashboard() {
                 { label: 'Pending Reviews', val: stats.pending_reviews || 0, accent: true },
                 { label: 'Total Investors', val: stats.total_investors || 0 },
                 { label: 'Total Farmers', val: stats.total_farmers || 0 },
-                { label: 'Funds Raised', val: `₦${((stats.total_funds_raised || 0) / 1000000).toFixed(1)}M`, green: true },
+                { label: 'Funds Raised', val: formatCurrency(stats.total_funds_raised), green: true },
               ].map(m => (
                 <div key={m.label} className="metric-card">
                   <div className="metric-card-label">{m.label}</div>
@@ -509,7 +678,10 @@ export default function AdminDashboard() {
               <button className="btn-link" onClick={() => handleTabChange('proofs')}>View all →</button>
             </div>
             {proofs.length === 0 ? (
-              <div className="card" style={{ padding: '32px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>🎉 All milestones verified.</div>
+              <div className="card" style={{ padding: '32px', textAlign: 'center', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <Icon name="milestones" size={32} />
+                <span>All milestones verified.</span>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {proofs.slice(0, 2).map(r => <ProofReviewCard key={r.id} proof={r} onAction={handleAction} />)}
@@ -549,7 +721,9 @@ export default function AdminDashboard() {
             <h1 style={{ fontSize: '26px', fontWeight: 700, marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>Pending Farm Reviews</h1>
             {pendingFarms.length === 0 ? (
               <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                <div style={{ fontSize: '40px', marginBottom: '12px' }}>🌿</div>
+                <div style={{ marginBottom: '16px', color: 'var(--color-primary)' }}>
+                  <Icon name="farms" size={40} />
+                </div>
                 <p>No farms currently awaiting review.</p>
               </div>
             ) : (
@@ -566,7 +740,12 @@ export default function AdminDashboard() {
           <>
             <h1 style={{ fontSize: '26px', fontWeight: 700, marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>Milestone Verification</h1>
             {proofs.length === 0 ? (
-              <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-secondary)' }}><div style={{ fontSize: '40px', marginBottom: '12px' }}>🎉</div><p>All milestone proofs have been verified!</p></div>
+              <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                <div style={{ color: 'var(--color-primary)' }}>
+                  <Icon name="milestones" size={40} />
+                </div>
+                <p>All milestone proofs have been verified!</p>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {proofs.map(r => <ProofReviewCard key={`${r.id}-${r.submitted_at}`} proof={r} onAction={handleAction} />)}
@@ -576,10 +755,57 @@ export default function AdminDashboard() {
           </>
         )}
 
+        {tab === 'harvest-reports' && (
+          <>
+            <h1 style={{ fontSize: '26px', fontWeight: 700, marginBottom: '8px', fontFamily: 'var(--font-heading)' }}>Harvest Report Reviews</h1>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '28px' }}>Confirm final yield and sales data to finalize investor returns.</p>
+            
+            {harvestReports.length === 0 ? (
+              <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+                <div style={{ marginBottom: '16px', color: 'var(--color-primary)' }}>
+                  <Icon name="harvest" size={40} />
+                </div>
+                <p>No harvest reports awaiting review.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {harvestReports.map(r => (
+                  <HarvestReportCard key={r.id} report={r} onVerify={handleVerifyHarvestReport} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {tab === 'payouts' && (
           <div style={{ position: 'relative' }}>
-            <h1 style={{ fontSize: '26px', fontWeight: 700, marginBottom: '24px', fontFamily: 'var(--font-heading)' }}>Payouts</h1>
-            
+            <h1 style={{ fontSize: '26px', fontWeight: 700, marginBottom: '8px', fontFamily: 'var(--font-heading)' }}>Payouts</h1>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '28px' }}>Review confirmed farmer repayments and disburse funds to investors.</p>
+
+            {/* Confirmed Repayments Section */}
+            {repayments.length > 0 && (
+              <div style={{ marginBottom: '32px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Confirmed Repayments <span className="badge badge-pending" style={{ marginLeft: '8px' }}>{repayments.length}</span></h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {repayments.map(r => (
+                    <div key={r.id} className="card" style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                      <div>
+                        <h3 style={{ fontWeight: 600, fontSize: '16px', marginBottom: '4px' }}>{r.farm_name}</h3>
+                        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Farmer: {r.farmer_name} · Repaid: {r.confirmed_at ? new Date(r.confirmed_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</p>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Total Repaid</div>
+                          <div style={{ fontWeight: 700, fontSize: '18px', color: 'var(--color-primary)' }}>{formatCurrency(r.amount)}</div>
+                        </div>
+                        <button className="btn btn-solid btn-sm" onClick={() => { setSelectedPayoutFarm(r.farm_id); }}>Disburse to Investors →</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div className="form-group" style={{ flex: '1 1 300px', maxWidth: '400px' }}>
                 <label className="form-label">Select Farm</label>
@@ -592,8 +818,7 @@ export default function AdminDashboard() {
                 <select className="form-select form-input" value={payoutStatusFilter} onChange={e => setPayoutStatusFilter(e.target.value)}>
                   <option value="all">All Payouts</option>
                   <option value="waiting">Waiting</option>
-                  <option value="successful">Successful</option>
-                  <option value="failed">Failed</option>
+                  <option value="completed">Completed</option>
                 </select>
               </div>
             </div>
@@ -610,11 +835,11 @@ export default function AdminDashboard() {
                 <div className="metric-cards" style={{ marginBottom: '32px' }}>
                   <div className="metric-card">
                     <div className="metric-card-label">Total Funding</div>
-                    <div className="metric-card-value">₦{farm.total_budget.toLocaleString()}</div>
+                    <div className="metric-card-value">{formatCurrency(farm.total_budget)}</div>
                   </div>
                   <div className="metric-card">
                     <div className="metric-card-label">Amount Raised</div>
-                    <div className="metric-card-value green">₦{farm.amount_raised.toLocaleString()}</div>
+                    <div className="metric-card-value green">{formatCurrency(farm.amount_raised)}</div>
                   </div>
                   <div className="metric-card">
                     <div className="metric-card-label">Status</div>
@@ -625,10 +850,10 @@ export default function AdminDashboard() {
             })()}
 
             {/* Batch Action Bar if waiting */}
-            {payoutStatusFilter !== 'successful' && payoutsList.filter(p => p.farmId === selectedPayoutFarm && p.status === 'waiting').length > 0 && (
+            {payoutStatusFilter !== 'completed' && payoutsList.filter(p => p.status === 'waiting').length > 0 && (
               <div style={{ marginBottom: '24px', padding: '16px 20px', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary-dark)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
-                  <span style={{ fontWeight: 600 }}>{payoutsList.filter(p => p.farmId === selectedPayoutFarm && p.status === 'waiting').length}</span> payouts waiting for transfer.
+                  <span style={{ fontWeight: 600 }}>{payoutsList.filter(p => p.status === 'waiting').length}</span> payouts waiting for transfer.
                 </div>
                 <button className="btn btn-solid btn-sm" onClick={() => setBatchDrawerOpen(true)}>Initiate All Transfers</button>
               </div>
@@ -677,7 +902,7 @@ export default function AdminDashboard() {
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {p.status === 'successful' ? <span className="badge badge-completed">Successful</span> :
+                          {p.status === 'completed' ? <span className="badge badge-completed">Completed</span> :
                            p.status === 'failed' ? <span className="badge badge-danger">Failed</span> :
                            <span className="badge badge-pending">Waiting</span>}
                           {p.status === 'failed' && (
@@ -703,8 +928,8 @@ export default function AdminDashboard() {
                 <button className="drawer-close btn-ghost" aria-label="Close" onClick={() => setBatchDrawerOpen(false)} style={{ position: 'absolute', top: 12, right: 12, padding: '8px' }}>✕</button>
                 <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '24px' }}>Confirm Batch Transfer</h2>
                 <div className="batch-drawer-body">
-                  <div style={{ fontWeight: 600, marginBottom: '12px' }}>{payoutsList.filter(p => p.farmId === selectedPayoutFarm && p.status === 'waiting').length} Investors Selected</div>
-                  {payoutsList.filter(p => p.farmId === selectedPayoutFarm && p.status === 'waiting').map(p => {
+                  <div style={{ fontWeight: 600, marginBottom: '12px' }}>{payoutsList.filter(p => p.status === 'waiting').length} Investors Selected</div>
+                  {payoutsList.filter(p => p.status === 'waiting').map(p => {
                     const profit = (typeof p.profit === 'number') ? p.profit : ((p.payoutAmount != null && p.amountInvested != null) ? ((p.payoutAmount <= p.amountInvested) ? p.payoutAmount : (p.payoutAmount - p.amountInvested)) : (p.payoutAmount || 0));
                     const total = (typeof p.totalToSend === 'number') ? p.totalToSend : ((p.amountInvested != null) ? ((p.amountInvested || 0) + profit) : (p.payoutAmount || 0));
                     return (
@@ -751,8 +976,8 @@ export default function AdminDashboard() {
                       <td style={{ fontWeight: 500 }}>{f.name}</td>
                       <td>{f.farmer?.full_name}</td>
                       <td><span className="badge badge-active">{f.crop_name}</span></td>
-                      <td className="text-mono">₦{(f.total_budget/1000).toFixed(0)}k</td>
-                      <td className="text-mono">₦{(f.amount_raised/1000).toFixed(0)}k</td>
+                      <td className="text-mono">{formatCurrency(f.total_budget)}</td>
+                      <td className="text-mono">{formatCurrency(f.amount_raised)}</td>
                       <td><span className={`badge badge-${f.status === 'active' ? 'active' : f.status === 'funded' ? 'pending' : f.status === 'completed' ? 'completed' : 'draft'}`} style={{ textTransform: 'capitalize' }}>{f.status}</span></td>
                       <td><Link to={`/farms/${f.id}`} className="btn-link">View</Link></td>
                     </tr>

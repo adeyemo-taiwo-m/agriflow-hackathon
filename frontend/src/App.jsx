@@ -21,7 +21,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/auth" element={<AuthPage />} />
-      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/agriflow-controls-5592/login" element={<AdminLogin />} />
       <Route path="/farms" element={<FarmListingsPage />} />
       <Route path="/farms/:id" element={<FarmDetailPage />} />
 
@@ -49,7 +49,7 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
 
-      <Route path="/admin/dashboard" element={
+      <Route path="/agriflow-controls-5592/dashboard" element={
         <ProtectedRoute allowedRoles={['admin']}>
           <AdminDashboard />
         </ProtectedRoute>

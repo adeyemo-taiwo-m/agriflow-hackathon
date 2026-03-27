@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, status, HTTPException, UploadFile, File, Form
+from fastapi.encoders import jsonable_encoder
 from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import List, Optional
 import uuid
@@ -8,6 +9,7 @@ from src.farms.services import FarmServices
 from src.farms.schemas import (
     FarmCreate,
     UploadFarmLocations,
+    FarmOut,
     FarmOutResponse,
     FarmDetailResponse,
     FarmOutListResponse,
@@ -21,7 +23,7 @@ farm_router = APIRouter()
 def get_farm_services() -> FarmServices:
     return FarmServices()
 
-@farm_router.post('/', status_code=status.HTTP_201_CREATED, response_model=FarmOutResponse)
+@farm_router.post('/', status_code=status.HTTP_201_CREATED)
 async def create_farm(
     farm_input: FarmCreate,
     current_farmer = Depends(get_current_farmer),
@@ -34,10 +36,10 @@ async def create_farm(
     return {
         "success": True,
         "message": "Farm record created successfully. Please proceed to upload photos and location details.",
-        "data": farm
+        "data": jsonable_encoder(farm)
     }
 
-@farm_router.post('/{farm_id}/uploads', status_code=status.HTTP_200_OK, response_model=FarmOutResponse)
+@farm_router.post('/{farm_id}/uploads', status_code=status.HTTP_200_OK)
 async def upload_farm_details(
     farm_id: uuid.UUID,
     latitude: float = Form(..., ge=4.0, le=14.0),
@@ -64,23 +66,40 @@ async def upload_farm_details(
     return {
         "success": True,
         "message": "Farm photos and milestones setup successfully.",
-        "data": farm
+        "data": jsonable_encoder(farm)
     }
 
-@farm_router.get('/my-farms', status_code=status.HTTP_200_OK, response_model=FarmOutListResponse)
+@farm_router.get('/my-farms', status_code=status.HTTP_200_OK)
 async def get_my_farms(
     current_farmer = Depends(get_current_farmer),
     session: AsyncSession = Depends(get_session),
     farm_services: FarmServices = Depends(get_farm_services)
 ):
     farms = await farm_services.get_farmer_farms(current_farmer.uid, session)
+    # Use FarmOut for explicit serialization of list
+    farms_data = [FarmOut.model_validate(f).model_dump() for f in farms]
     return {
         "success": True,
         "message": "Farms retrieved successfully",
-        "data": farms
+        "data": jsonable_encoder(farms_data)
     }
 
-@farm_router.get('/', status_code=status.HTTP_200_OK, response_model=FarmListResponse)
+@farm_router.get('/my-farms/ready-for-harvest', status_code=status.HTTP_200_OK)
+async def get_ready_for_harvest_farms(
+    current_farmer = Depends(get_current_farmer),
+    session: AsyncSession = Depends(get_session),
+    farm_services: FarmServices = Depends(get_farm_services)
+):
+    farms = await farm_services.get_harvest_ready_farms(current_farmer.uid, session)
+    # Use FarmOut for explicit serialization of list
+    farms_data = [FarmOut.model_validate(f).model_dump() for f in farms]
+    return {
+        "success": True,
+        "message": "Ready farms retrieved successfully",
+        "data": jsonable_encoder(farms_data)
+    }
+
+@farm_router.get('/', status_code=status.HTTP_200_OK)
 async def get_farms(
     crop_name: Optional[str] = None,
     state: Optional[str] = None,
@@ -92,21 +111,22 @@ async def get_farms(
     return {
         "success": True,
         "message": "Farms retrieved successfully",
-        "data": farms
+        "data": jsonable_encoder(farms)
     }
 
-@farm_router.get('/{farm_id}', status_code=status.HTTP_200_OK, response_model=FarmDetailResponse)
+@farm_router.get('/{farm_id}', status_code=status.HTTP_200_OK)
 async def get_farm(
     farm_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
     farm_services: FarmServices = Depends(get_farm_services)
 ):
     farm = await farm_services.get_farm_by_id(farm_id, session)
-    
+    # Use FarmOut for explicit serialization
+    farm_data = FarmOut.model_validate(farm).model_dump()
     return {
         "success": True,
         "message": "Farm retrieved successfully",
-        "data": farm
+        "data": jsonable_encoder(farm_data)
     }
 
 @farm_router.get("/{id}/roi-breakdown")
@@ -122,3 +142,12 @@ async def get_roi_breakdown(
         "message": "ROI projections generated successfully", 
         "data": result
     }
+@farm_router.delete('/{farm_id}', status_code=status.HTTP_200_OK)
+async def delete_farm(
+    farm_id: uuid.UUID,
+    current_farmer = Depends(get_current_farmer),
+    session: AsyncSession = Depends(get_session),
+    farm_services: FarmServices = Depends(get_farm_services)
+):
+    await farm_services.delete_farm(farm_id, current_farmer.uid, session)
+    return {"success": True, "message": "Farm deleted successfully"}

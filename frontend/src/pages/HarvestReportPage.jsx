@@ -6,6 +6,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import CurrencyInput from '../components/CurrencyInput';
 import { mockFarmerFarms } from '../data/mockData';
 import { useNavigate } from 'react-router-dom';
+import Icon from '../components/Icon';
 
 const navItems = [
   { key: 'farms', label: 'My Farms', icon: 'farms' },
@@ -107,9 +108,13 @@ export default function HarvestReportPage() {
             >
               <input {...getInputProps()} disabled={!selectedFarm} />
               {evidence ? (
-                <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>✓ {evidence.name} attached</span>
+                <span style={{ color: 'var(--color-primary)', fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <Icon name="milestones" size={18} /> {evidence.name} attached
+                </span>
               ) : (
-                <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>📎 Upload bank alert or receipt photo</span>
+                <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <Icon name="add" size={20} /> Upload bank alert or receipt photo
+                </span>
               )}
             </div>
             <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>Required to verify harvest proceeds before investor payout.</p>

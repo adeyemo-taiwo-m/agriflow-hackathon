@@ -66,10 +66,32 @@ class InvestmentServices:
                 detail="Failed to initiate investment"
             )
 
+        # --- HACKATHON SMART SCALING LOGIC ---
+        # 100,000 Naira = 10,000,000 Kobo
+        INTERSWITCH_LIMIT_KOBO = 10_000_000 
+        MINIMUM_PAYMENT_KOBO = 10_000 # 100 Naira
+        
+        is_test_mode_scaled = False
+        scale_factor = 1
+        interswitch_checkout_amount = amount_kobo
+
+        # Only scale if the amount hits or exceeds our 100k limit
+        if amount_kobo >= INTERSWITCH_LIMIT_KOBO:
+            is_test_mode_scaled = True
+            scale_factor = 1000
+            interswitch_checkout_amount = amount_kobo // scale_factor
+            
+            # Failsafe: Ensure the scaled amount never drops below 100 Naira
+            if interswitch_checkout_amount < MINIMUM_PAYMENT_KOBO:
+                interswitch_checkout_amount = MINIMUM_PAYMENT_KOBO
+
         # Step 6 — Return checkout params
         return {
             "txn_ref": txn_ref,
-            "amount_kobo": amount_kobo,
+            "amount_kobo": interswitch_checkout_amount, # What gateway sees
+            "actual_amount_kobo": amount_kobo,          # What frontend sees
+            "is_test_mode_scaled": is_test_mode_scaled,
+            "scale_factor": scale_factor,
             "merchant_code": Config.INTERSWITCH_PAYMENT_MERCHANT_CODE,
             "payment_item_id": Config.INTERSWITCH_PAYMENT_PAY_ITEM_ID,
             "customer_email": investor.email,
@@ -94,10 +116,19 @@ class InvestmentServices:
                 "amount": investment.amount_kobo / 100
             }
 
+        # --- REVERSE SMART SCALING LOGIC ---
+        INTERSWITCH_LIMIT_KOBO = 10_000_000
+        expected_interswitch_amount = investment.amount_kobo
+        
+        if investment.amount_kobo >= INTERSWITCH_LIMIT_KOBO:
+            expected_interswitch_amount = investment.amount_kobo // 1000
+            if expected_interswitch_amount < 10_000:
+                expected_interswitch_amount = 10_000
+
         # Step 3 — Call Interswitch
         result = await interswitch_svc.check_interswitch_transaction(
             txn_ref=user_input.txn_ref.upper(),
-            expected_amount=investment.amount_kobo,
+            expected_amount=expected_interswitch_amount, # Checks against the dynamically scaled amount
         )
 
         # Step 4 — Fetch the farm
@@ -268,11 +299,11 @@ class InvestmentServices:
                 "farmId": str(farm.id),
                 "farmName": farm.name,
                 "crop": farm.crop_name,
-                "investedAmount": inv.amount_kobo / 100,
-                "expected": (inv.amount_kobo * (1 + farm.return_rate)) / 100,
+                "invested_amount": inv.amount_kobo / 100,
+                "expected": farm.return_rate,
                 "expectedDate": farm.harvest_date,
                 "statusStep": step,
-                "status": "Successful" if step == 5 else "Processing",
+                "status": "successful" if step == 5 else "processing",
                 "dateStatus": "imminent" if farm.farm_status == FarmStatus.FUNDED else "normal"
             })
             

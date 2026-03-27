@@ -15,33 +15,11 @@ export default function AdminLogin() {
   const {
     register,
     handleSubmit,
-    formState: { errors },
-    setValue
+    formState: { errors }
   } = useForm();
-
-  useEffect(() => {
-    if (searchParams.get("demo") === "true") {
-      setValue("email", "admin@agriflow.ng");
-      setValue("password", "Admin123!");
-      // Option to trigger submit automatically:
-      setTimeout(() => {
-        handleSubmit(onSubmit)();
-      }, 100);
-    }
-  }, [searchParams]);
-
-  const [isDemo, setIsDemo] = useState(false);
 
   const onSubmit = async (data) => {
     setLoading(true);
-
-    if (isDemo) {
-      demoLogin("admin", { name: "Admin User", email: data.email });
-      addToast("Welcome Admin (Demo Account)", "success");
-      navigate("/admin/dashboard");
-      setLoading(false);
-      return;
-    }
 
     try {
       await adminLogin({
@@ -49,7 +27,7 @@ export default function AdminLogin() {
         password: data.password,
       });
       addToast("Welcome Admin", "success");
-      navigate("/admin/dashboard");
+      navigate("/agriflow-controls-5592/dashboard");
     } catch (err) {
       if (err.response) {
         if (err.response.status === 400) {

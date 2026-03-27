@@ -206,20 +206,6 @@ export default function AuthPage() {
           <button type="submit" className="btn btn-solid btn-full" style={{ marginTop: '8px' }} disabled={loading}>
             {loading ? 'Processing...' : (tab === 'login' ? 'Log In' : 'Create Account')}
           </button>
-
-          {tab === 'signup' && (
-            <Link to="/admin/login" className="auth-note" style={{ display: 'block' }}>Admin access is granted separately.</Link>
-          )}
-
-          {/* Demo shortcuts */}
-          <div className="auth-demo">
-            <p className="auth-demo-label">Quick demo access:</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-              <button type="button" className="btn btn-solid btn-sm" style={{ background: 'var(--color-primary)', color: '#fff' }} onClick={() => fillAndSubmit('farmer01@agriflow.com', 'Farmer123!', 'farmer')}>Farmer View</button>
-              <button type="button" className="btn btn-solid btn-sm" style={{ background: 'var(--color-primary)', color: '#fff' }} onClick={() => fillAndSubmit('test@email.com', 'Test1234!', 'investor')}>Investor View</button>
-            </div>
-            <button type="button" className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: '16px', color: 'var(--color-accent)', borderColor: 'var(--color-accent)' }} onClick={() => navigate('/admin/login?demo=true')}>Admin View</button>
-          </div>
         </form>
       </div>
 
