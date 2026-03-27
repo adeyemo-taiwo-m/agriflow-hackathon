@@ -1603,6 +1603,7 @@ function HarvestTab() {
 export default function FarmerDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(searchParams.get('tab') || 'farms');
+  const hasMountedTabRefreshRef = useRef(false);
   
   useEffect(() => {
     const currentTab = searchParams.get('tab') || 'farms';
@@ -1628,7 +1629,7 @@ export default function FarmerDashboard() {
   const [loadingFarms, setLoadingFarms] = useState(true);
   const [banks, setBanks] = useState([]);
 
-  const fetchFarms = async () => {
+  const fetchFarms = useCallback(async () => {
     try {
       const res = await api.get('/farms/my-farms');
       setFarms(res.data.data);
@@ -1637,16 +1638,16 @@ export default function FarmerDashboard() {
     } finally {
       setLoadingFarms(false);
     }
-  };
+  }, []);
 
-  const fetchBanks = async () => {
+  const fetchBanks = useCallback(async () => {
     try {
       const res = await api.get('/banks');
       setBanks(res.data.data);
     } catch (err) {
       console.error("Failed to load banks");
     }
-  };
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -1671,7 +1672,22 @@ export default function FarmerDashboard() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchProfile, fetchFarms, fetchBanks]);
+
+  useEffect(() => {
+    if (!hasMountedTabRefreshRef.current) {
+      hasMountedTabRefreshRef.current = true;
+      return;
+    }
+
+    if (document.visibilityState !== 'visible') return;
+
+    fetchProfile();
+    fetchFarms();
+    if (tab === 'settings') {
+      fetchBanks();
+    }
+  }, [tab, fetchProfile, fetchFarms, fetchBanks]);
 
   const displayFarms = farms;
   const paginatedFarms = displayFarms.slice(fbStart, fbStart + ITEMS_PER_PAGE);
@@ -2008,7 +2024,7 @@ export default function FarmerDashboard() {
                 <p style={{color:'var(--color-text-secondary)',fontSize:'16px',maxWidth:'320px',margin:'0 auto'}}>Our team will review your farm listing within 24 hours.</p>
                 <button className="btn btn-solid" style={{marginTop:'32px',padding:'12px 32px'}} onClick={()=>{setDone(false);handleTabChange('farms');}}>Back to My Farms</button>
               </div>
-            ) : <FarmCreationForm continueFarm={draftFarmToContinue} onDone={()=>setDone(true)}/>}
+            ) : <FarmCreationForm continueFarm={draftFarmToContinue} onDone={() => { setDone(true); fetchFarms(); }}/>}
           </div>
         )}
 

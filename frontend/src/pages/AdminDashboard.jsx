@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -357,6 +357,12 @@ function ProofReviewCard({ proof, onAction }) {
 export default function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(searchParams.get('tab') || 'overview');
+  const hasMountedTabRefreshRef = useRef(false);
+
+  useEffect(() => {
+    const currentTab = searchParams.get('tab') || 'overview';
+    if (tab !== currentTab) setTab(currentTab);
+  }, [searchParams]);
   
   const [stats, setStats] = useState(mockAdminStats);
   const [pendingFarms, setPendingFarms] = useState([]);
@@ -463,6 +469,59 @@ export default function AdminDashboard() {
     
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!hasMountedTabRefreshRef.current) {
+      hasMountedTabRefreshRef.current = true;
+      return;
+    }
+
+    if (document.visibilityState !== 'visible') return;
+
+    const refreshByTab = async () => {
+      try {
+        switch (tab) {
+          case 'pending-farms':
+            await Promise.allSettled([fetchPendingFarms(), fetchStats()]);
+            break;
+          case 'proofs':
+            await Promise.allSettled([fetchPendingProofs(), fetchStats()]);
+            break;
+          case 'harvest-reports':
+            await Promise.allSettled([fetchHarvestReports(), fetchRepayments(), fetchStats()]);
+            break;
+          case 'payouts':
+            await Promise.allSettled([
+              fetchAllFarms(),
+              fetchRepayments(),
+              selectedPayoutFarm ? fetchPayouts(selectedPayoutFarm) : Promise.resolve(),
+            ]);
+            break;
+          case 'farms':
+            await Promise.allSettled([fetchAllFarms(), fetchStats()]);
+            break;
+          case 'users':
+            await fetchUsers();
+            break;
+          case 'settings':
+            await fetchProfile();
+            break;
+          default:
+            await Promise.allSettled([
+              fetchStats(),
+              fetchPendingFarms(),
+              fetchPendingProofs(),
+              fetchHarvestReports(),
+              fetchRepayments(),
+            ]);
+        }
+      } catch (err) {
+        console.error('Failed to refresh admin tab data', err);
+      }
+    };
+
+    refreshByTab();
+  }, [tab, selectedPayoutFarm]);
 
   const handleFarmAction = async (id, action, reason) => {
     try {
