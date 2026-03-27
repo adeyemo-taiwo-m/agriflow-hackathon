@@ -21,7 +21,6 @@ export default function Footer() {
             <a href="#" className="footer-link">Privacy Policy</a>
             <a href="#" className="footer-link">Terms of Service</a>
             <a href="mailto:hello@agriflow.ng" className="footer-link">Contact Us</a>
-            <a href="#" className="footer-link">Admin Access</a>
           </div>
         </div>
         <div className="footer-bottom">

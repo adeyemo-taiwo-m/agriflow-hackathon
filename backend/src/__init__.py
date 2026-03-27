@@ -14,6 +14,15 @@ from src.milestones.routes import milestone_router
 from src.investments.routes import investment_router
 from src.harvest.routes import harvest_router
 
+# Resolve Pydantic v2 forward references after all models are imported.
+# String annotations (e.g. List['Farm']) prevent circular ImportErrors at
+# module load time, but Pydantic still needs model_rebuild() to finalize
+# the serializer so model_dump() and response_model validation work correctly.
+from src.farms.models import Farm
+from src.auth.models import User
+Farm.model_rebuild()
+User.model_rebuild()
+
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 

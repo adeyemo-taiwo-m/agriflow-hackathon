@@ -6,6 +6,8 @@ import api from "../utils/api";
 import EmptyState from "../components/EmptyState";
 import DashboardLayout from "../components/DashboardLayout";
 import Pagination from "../components/Pagination";
+import Icon from "../components/Icon";
+import { formatCurrency } from "../utils/format";
 
 const navItems = [
   { key: "overview", label: "Overview", icon: "overview" },
@@ -93,7 +95,35 @@ export default function InvestorDashboard() {
   useEffect(() => {
     fetchProfile();
     initData();
+
+    // Auto-refresh every 30 seconds (only if window is focused)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        // Silent refresh of key data
+        Promise.all([
+          api.get("/investments"),
+          api.get("/investments/payouts/expected")
+        ]).then(([invRes, payRes]) => {
+          setInvestments(invRes.data.data);
+          setExpectedPayouts(payRes.data.data);
+        }).catch(() => {});
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
+
+  // Sync payout details when user profile updates (e.g. after KYC)
+  useEffect(() => {
+    if (user?.bank_account_number && !detailsSaved) {
+      setPayoutDetails({
+        accountName: user.bank_account_name || "",
+        bankCode: user.bank_code || "",
+        accountNumber: user.bank_account_number || "",
+      });
+      setDetailsSaved(true);
+    }
+  }, [user, detailsSaved]);
 
   const kycComplete = user?.bvn_verified && user?.bank_verified;
 
@@ -142,11 +172,11 @@ export default function InvestorDashboard() {
     (i) => i.status === "confirmed",
   ).length;
 
-  const totalExpectedDisplay = user?.isNewUser ? 0 : 226000;
-  const inTransitDisplay = user?.isNewUser ? 0 : 62000;
-  const receivedDisplay = user?.isNewUser ? 0 : 30500;
-  const activeFarmsCount = user?.isNewUser ? 0 : 4;
-  const historicPayoutsCount = user?.isNewUser ? 0 : 1;
+  const totalExpectedDisplay = displayPayouts.reduce((s, p) => s + ((p.invested_amount || 0) * (1 + (p.expected || 0))), 0);
+  const inTransitDisplay = displayPayouts.filter(p => p.statusStep === 4).reduce((s, p) => s + ((p.invested_amount || 0) * (1 + (p.expected || 0))), 0);
+  const receivedDisplay = displayPayouts.filter(p => p.statusStep === 5).reduce((s, p) => s + ((p.invested_amount || 0) * (1 + (p.expected || 0))), 0);
+  const activeFarmsCount = new Set(displayPayouts.map(p => p.farmId)).size;
+  const historicPayoutsCount = displayPayouts.filter(p => p.statusStep === 5).length;
 
   const navFooter = (
     <>
@@ -284,19 +314,19 @@ export default function InvestorDashboard() {
             <div className="metric-card">
               <div className="metric-card-label">Total Expected Profit</div>
               <div className="metric-card-value gold text-mono">
-                ₦{totalExpectedProfit.toLocaleString()}
+                {formatCurrency(totalExpectedProfit)}
               </div>
             </div>
             <div className="metric-card">
               <div className="metric-card-label">Total Expected Payout</div>
               <div className="metric-card-value text-mono">
-                ₦{totalExpectedPayout.toLocaleString()}
+                {formatCurrency(totalExpectedPayout)}
               </div>
             </div>
             <div className="metric-card">
               <div className="metric-card-label">Received to Date</div>
               <div className="metric-card-value green text-mono">
-                ₦{receivedToDate.toLocaleString()}
+                {formatCurrency(receivedToDate)}
               </div>
             </div>
           </div>
@@ -356,101 +386,119 @@ export default function InvestorDashboard() {
           >
             Returns
           </h1>
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-          >
-            {displayPortfolio.map((inv) => (
-              <div key={inv.id} className="card" style={{ padding: "24px" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    marginBottom: "16px",
-                  }}
-                >
-                  <div>
-                    <h3 style={{ fontWeight: 600 }}>{inv.farmName}</h3>
-                    <p
-                      style={{
-                        fontSize: "13px",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      {inv.crop}
-                    </p>
+          {displayPortfolio.length > 0 ? (
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+            >
+              {displayPortfolio.map((inv) => (
+                <div key={inv.id} className="card" style={{ padding: "24px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <div>
+                      <h3 style={{ fontWeight: 600 }}>{inv.farmName}</h3>
+                      <p
+                        style={{
+                          fontSize: "13px",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        {inv.crop}
+                      </p>
+                    </div>
+                    <span className="badge badge-pending">Pending Harvest</span>
                   </div>
-                  <span className="badge badge-pending">Pending</span>
+                  <div style={{ display: "flex", gap: "40px", flexWrap: "wrap" }}>
+                    <div>
+                      <div
+                        className="text-mono"
+                        style={{
+                          fontSize: "13px",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        Invested
+                      </div>
+                      <div
+                        className="text-mono"
+                        style={{ fontSize: "20px", fontWeight: 700 }}
+                      >
+                        {formatCurrency(inv.amount)}
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        className="text-mono"
+                        style={{
+                          fontSize: "13px",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        Expected Returns
+                      </div>
+                      <div
+                        className="text-mono"
+                        style={{
+                          fontSize: "20px",
+                          fontWeight: 700,
+                          color: "var(--color-primary)",
+                        }}
+                      >
+                        {formatCurrency(inv.expected_return || 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        className="text-mono"
+                        style={{
+                          fontSize: "13px",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        Est. Gain
+                      </div>
+                      <div
+                        className="text-mono"
+                        style={{
+                          fontSize: "20px",
+                          fontWeight: 700,
+                          color: "var(--color-accent)",
+                        }}
+                      >
+                        +
+                        {(
+                          (((inv.expected_return || 0) - (inv.amount || 0)) / (inv.amount || 1)) *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: "40px", flexWrap: "wrap" }}>
-                  <div>
-                    <div
-                      className="text-mono"
-                      style={{
-                        fontSize: "13px",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      Invested
-                    </div>
-                    <div
-                      className="text-mono"
-                      style={{ fontSize: "20px", fontWeight: 700 }}
-                    >
-                      ₦{inv.amount.toLocaleString()}
-                    </div>
+              ))}
+            </div>
+          ) : (
+            <div className="card" style={{ padding: "48px 32px", textAlign: "center", background: "var(--color-surface)", borderRadius: '16px' }}>
+               <div style={{ marginBottom: "24px", color: "var(--color-primary)" }}>
+                 <Icon name="chart" size={64} />
+               </div>
+               <h3 style={{ fontSize: '20px', fontWeight: 700, marginBottom: "12px" }}>Track Your Growth</h3>
+               <p style={{ color: "var(--color-text-secondary)", maxWidth: "500px", margin: "0 auto 24px auto", lineHeight: 1.6 }}>
+                 Once your funded farms reach harvest and the proceeds are disbursed, your realized returns will appear here. 
+               </p>
+               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "16px", maxWidth: "400px", margin: "0 auto" }}>
+                  <div style={{ padding: "20px", background: "var(--color-card-alt)", borderRadius: "12px", border: '1px solid var(--color-border)' }}>
+                     <span style={{ fontSize: "12px", color: "var(--color-text-secondary)", textTransform: "uppercase", fontWeight: 600 }}>Total Realized Returns</span>
+                     <div className="text-mono" style={{ fontSize: "32px", fontWeight: 700, color: "var(--color-primary)", marginTop: "8px" }}>₦0.00</div>
                   </div>
-                  <div>
-                    <div
-                      className="text-mono"
-                      style={{
-                        fontSize: "13px",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      Expected
-                    </div>
-                    <div
-                      className="text-mono"
-                      style={{
-                        fontSize: "20px",
-                        fontWeight: 700,
-                        color: "var(--color-primary)",
-                      }}
-                    >
-                      ₦{inv.expected_return.toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <div
-                      className="text-mono"
-                      style={{
-                        fontSize: "13px",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      Uplift
-                    </div>
-                    <div
-                      className="text-mono"
-                      style={{
-                        fontSize: "20px",
-                        fontWeight: 700,
-                        color: "var(--color-accent)",
-                      }}
-                    >
-                      +
-                      {(
-                        ((inv.expected_return - inv.amount) / inv.amount) *
-                        100
-                      ).toFixed(1)}
-                      %
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+               </div>
+            </div>
+          )}
         </>
       )}
       {tab === "payouts" && (
@@ -497,63 +545,63 @@ export default function InvestorDashboard() {
               marginBottom: "32px",
             }}
           >
-            <div className="metric-card">
-              <div className="metric-card-label">Total Expected</div>
-              <div className="metric-card-value text-mono">
-                ₦{totalExpectedDisplay.toLocaleString()}
+              <div className="metric-card">
+                <div className="metric-card-label">Total Expected</div>
+                <div className="metric-card-value text-mono">
+                  {formatCurrency(totalExpectedDisplay)}
+                </div>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "4px",
+                  }}
+                >
+                  (across {activeFarmsCount} farms)
+                </div>
               </div>
               <div
-                style={{
-                  fontSize: "12px",
-                  color: "var(--color-text-secondary)",
-                  marginTop: "4px",
-                }}
+                className="metric-card"
+                style={{ borderColor: "var(--color-accent)" }}
               >
-                (across {activeFarmsCount} farms)
-              </div>
-            </div>
-            <div
-              className="metric-card"
-              style={{ borderColor: "var(--color-accent)" }}
-            >
-              <div
-                className="metric-card-label"
-                style={{ color: "var(--color-accent)" }}
-              >
-                In Transit
-              </div>
-              <div
-                className="metric-card-value text-mono"
-                style={{ color: "var(--color-accent)" }}
-              >
-                ₦{inTransitDisplay.toLocaleString()}
-              </div>
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "var(--color-text-secondary)",
-                  marginTop: "4px",
-                }}
-              >
-                (proceeds confirmed)
-              </div>
-            </div>
-            <div
-              className="metric-card"
-              style={{ borderColor: "var(--color-primary)" }}
-            >
-              <div
-                className="metric-card-label"
-                style={{ color: "var(--color-primary)" }}
-              >
-                Received to Date
+                <div
+                  className="metric-card-label"
+                  style={{ color: "var(--color-accent)" }}
+                >
+                  In Transit
+                </div>
+                <div
+                  className="metric-card-value text-mono"
+                  style={{ color: "var(--color-accent)" }}
+                >
+                  {formatCurrency(inTransitDisplay)}
+                </div>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--color-text-secondary)",
+                    marginTop: "4px",
+                  }}
+                >
+                  (proceeds confirmed)
+                </div>
               </div>
               <div
-                className="metric-card-value text-mono"
-                style={{ color: "var(--color-primary)" }}
+                className="metric-card"
+                style={{ borderColor: "var(--color-primary)" }}
               >
-                ₦{receivedDisplay.toLocaleString()}
-              </div>
+                <div
+                  className="metric-card-label"
+                  style={{ color: "var(--color-primary)" }}
+                >
+                  Received to Date
+                </div>
+                <div
+                  className="metric-card-value text-mono"
+                  style={{ color: "var(--color-primary)" }}
+                >
+                  {formatCurrency(receivedDisplay)}
+                </div>
               <div
                 style={{
                   fontSize: "12px",
@@ -695,7 +743,7 @@ export default function InvestorDashboard() {
                       </div>
                       <div>
                         <strong className="text-mono">
-                          ₦{(ep.investedAmount || 0).toLocaleString()}
+                          {formatCurrency(ep.invested_amount || 0)}
                         </strong>
                       </div>
                       <div style={{ height: "8px" }} />
@@ -712,10 +760,7 @@ export default function InvestorDashboard() {
                           className="text-mono"
                           style={{ color: "var(--color-primary)" }}
                         >
-                          ₦
-                          {(
-                            (ep.expected || 0) - (ep.investedAmount || 0) || 0
-                          ).toLocaleString()}
+                          {formatCurrency((ep.invested_amount || 0) * (ep.expected || 0))}
                         </strong>
                       </div>
                       <div style={{ height: "8px" }} />
@@ -732,7 +777,7 @@ export default function InvestorDashboard() {
                           className="text-mono"
                           style={{ fontSize: "20px" }}
                         >
-                          {(ep.expected || 0).toLocaleString()}
+                          {formatCurrency((ep.invested_amount || 0) * (1 + (ep.expected || 0)))}
                         </strong>
                       </div>
                       <div style={{ height: "8px" }} />
@@ -749,12 +794,7 @@ export default function InvestorDashboard() {
                           className="text-mono"
                           style={{ color: "var(--color-accent)" }}
                         >
-                          {(
-                            (((ep.expected_payout || 0) - (ep.invested_amount || 0)) /
-                              (ep.invested_amount || 1)) *
-                            100
-                          ).toFixed(1)}
-                          %
+                          {((ep.expected || 0) * 100).toFixed(1)}%
                         </strong>
                       </div>
                     </div>
@@ -865,7 +905,7 @@ export default function InvestorDashboard() {
                         {ep.statusStep === 4 &&
                           "Proceeds confirmed — payout initiated to your account."}
                         {ep.statusStep === 5 &&
-                          `Paid on ${new Date(ep.expectedDate).toLocaleDateString()} — ₦${ep.expected.toLocaleString()}`}
+                          `Paid on ${new Date(ep.expectedDate).toLocaleDateString()} — ${formatCurrency((ep.invested_amount || 0) * (1 + (ep.expected || 0)))}`}
                         {ep.dateStatus === "overdue" && (
                           <span
                             style={{
@@ -936,7 +976,7 @@ export default function InvestorDashboard() {
                         <span className="badge badge-active">{ep.crop}</span>
                       </td>
                       <td className="text-mono">
-                        ₦{ep.investedAmount.toLocaleString()}
+                        {formatCurrency(ep.invested_amount || 0)}
                       </td>
                       <td
                         className="text-mono"
@@ -945,10 +985,10 @@ export default function InvestorDashboard() {
                           fontWeight: 600,
                         }}
                       >
-                        ₦{ep.expected.toLocaleString()}
+                        {formatCurrency((ep.invested_amount || 0) * (1 + (ep.expected || 0)))}
                       </td>
                       <td style={{ textTransform: "capitalize" }}>
-                        Fixed ROI
+                        {ep.return_type || 'Fixed ROI'}
                       </td>
                       <td
                         style={{
@@ -987,6 +1027,7 @@ export default function InvestorDashboard() {
           )}
         </>
       )}
+
       {tab === "settings" && (
         <div>
           <h1
@@ -1041,7 +1082,7 @@ export default function InvestorDashboard() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: user?.bvn_verified ? 'rgba(16, 185, 129, 0.05)' : 'var(--color-surface)', borderRadius: '8px', border: user?.bvn_verified ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid var(--color-border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '18px' }}>🆔</span>
+                    <Icon name="id" size={22} />
                     <span style={{ fontSize: '14px', fontWeight: 500 }}>BVN Verification</span>
                   </div>
                   <span style={{ fontSize: '12px', fontWeight: 600, color: user?.bvn_verified ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>
@@ -1051,7 +1092,7 @@ export default function InvestorDashboard() {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: user?.bank_verified ? 'rgba(16, 185, 129, 0.05)' : 'var(--color-surface)', borderRadius: '8px', border: user?.bank_verified ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid var(--color-border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '18px' }}>🏦</span>
+                    <Icon name="bank" size={22} />
                     <span style={{ fontSize: '14px', fontWeight: 500 }}>Bank Account</span>
                   </div>
                   <span style={{ fontSize: '12px', fontWeight: 600, color: user?.bank_verified ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>
@@ -1064,125 +1105,65 @@ export default function InvestorDashboard() {
                 <button 
                   className="btn btn-solid btn-full" 
                   style={{ background: 'var(--color-primary)' }}
-                  onClick={() => setIsKycOpen(true)}
+                              onClick={() => setIsKycOpen(true)}
                 >
                   Complete Verification
                 </button>
               )}
             </div>
-
-            {/* Payout Details */}
             <div
               className="card"
               style={{ padding: "24px", flex: "1 1 320px", maxWidth: "600px" }}
             >
-              <h3 style={{ fontWeight: 600, marginBottom: "12px" }}>
-                Payout Details
+              <h3 style={{ fontWeight: 600, marginBottom: "16px" }}>
+                Payout Destination
               </h3>
               <p
                 style={{
                   fontSize: "13px",
                   color: "var(--color-text-secondary)",
-                  marginBottom: "20px",
+                  marginBottom: "24px",
                   lineHeight: 1.5,
                 }}
               >
-                Where should we send your returns when your farms complete?
-                Account name must match your BVN in production.
+                Returns are automatically disbursed to this account. To change these details, please update your bank verification.
               </p>
 
-              {detailsSaved ? (
-                <div
-                  style={{
-                    padding: "16px",
-                    backgroundColor: "var(--color-primary-light)",
-                    color: "var(--color-primary-dark)",
-                    borderRadius: "8px",
-                    marginBottom: "20px",
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                  }}
-                >
-                  <span style={{ fontSize: "18px" }}>✓</span> Your details are
-                  saved. You’ll receive payouts here when your investments
-                  complete.
+              {user?.bank_verified ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ padding: '16px', background: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                     <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 600 }}>Bank Name</div>
+                     <div style={{ fontWeight: 600 }}>{banks.find(b => b.code === user.bank_code)?.name || user.bank_code || 'Verified Bank'}</div>
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={{ padding: '16px', background: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                       <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 600 }}>Account Number</div>
+                       <div className="text-mono" style={{ fontWeight: 700, fontSize: '16px' }}>{user.bank_account_number}</div>
+                    </div>
+                    <div style={{ padding: '16px', background: 'var(--color-surface)', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                       <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 600 }}>Account Name</div>
+                       <div style={{ fontWeight: 600, fontSize: '14px' }}>{user.bank_account_name}</div>
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', fontSize: '13px', fontWeight: 500, marginTop: '8px' }}>
+                    <Icon name="milestones" size={16} />
+                    Verified for Automated Payouts
+                  </div>
                 </div>
-              ) : null}
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "16px",
-                  marginBottom: "16px",
-                }}
-              >
-                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <label className="form-label">
-                    Account Name (Must match BVN)
-                  </label>
-                  <input
-                    className="form-input"
-                    value={payoutDetails.accountName}
-                    onChange={(e) =>
-                      setPayoutDetails({
-                        ...payoutDetails,
-                        accountName: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. Chukwuemeka Obi"
-                  />
+              ) : (
+                <div style={{ textAlign: 'center', padding: '32px 16px', background: 'rgba(57, 102, 57, 0.05)', borderRadius: '12px', border: '1px dashed var(--color-primary)' }}>
+                   <div style={{ color: 'var(--color-primary)', marginBottom: '12px' }}>
+                     <Icon name="bank" size={32} />
+                   </div>
+                   <h4 style={{ fontWeight: 600, marginBottom: '8px' }}>No Verified Destination</h4>
+                   <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
+                     Complete your bank verification to enable automated returns.
+                   </p>
+                   <button className="btn btn-solid btn-sm" onClick={() => setIsKycOpen(true)}>Verify Bank Now</button>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Bank Name</label>
-                  <select
-                    className="form-select form-input"
-                    value={payoutDetails.bankName}
-                    onChange={(e) =>
-                      setPayoutDetails({
-                        ...payoutDetails,
-                        bankName: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">Select Bank...</option>
-                    <option value="GTBank">GTBank</option>
-                    <option value="First Bank">First Bank</option>
-                    <option value="Zenith Bank">Zenith Bank</option>
-                    <option value="Access Bank">Access Bank</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Account Number</label>
-                  <input
-                    className="form-input text-mono"
-                    maxLength={10}
-                    value={payoutDetails.accountNumber}
-                    onChange={(e) =>
-                      setPayoutDetails({
-                        ...payoutDetails,
-                        accountNumber: e.target.value,
-                      })
-                    }
-                    placeholder="0123456789"
-                  />
-                </div>
-              </div>
-
-              <button
-                className="btn btn-solid"
-                style={{ width: "100%" }}
-                onClick={() => setDetailsSaved(true)}
-                disabled={
-                  detailsSaved ||
-                  (!payoutDetails.accountName && !payoutDetails.accountNumber)
-                }
-              >
-                Save Payout Details
-              </button>
+              )}
             </div>
           </div>
         </div>
@@ -1250,7 +1231,7 @@ function InvestmentsView({ investments, mode }) {
                   </span>
                   <div>
                     <strong className="text-mono">
-                      ₦{inv.amount.toLocaleString()}
+                      {formatCurrency(inv.amount)}
                     </strong>
                   </div>
                 </div>
@@ -1263,10 +1244,7 @@ function InvestmentsView({ investments, mode }) {
                       className="text-mono"
                       style={{ color: "var(--color-primary)" }}
                     >
-                      ₦
-                      {(
-                        (inv.expected_return || 0) - (inv.amount || 0)
-                      ).toLocaleString()}
+                      {formatCurrency((inv.expected_return || 0) - (inv.amount || 0))}
                     </strong>
                   </div>
                 </div>
@@ -1276,7 +1254,7 @@ function InvestmentsView({ investments, mode }) {
                   </span>
                   <div>
                     <strong className="text-mono">
-                      ₦{(inv.expected_return || 0).toLocaleString()}
+                      {formatCurrency(inv.expected_return || 0)}
                     </strong>
                   </div>
                 </div>
@@ -1355,7 +1333,7 @@ function InvestmentsView({ investments, mode }) {
               <td>
                 <span className="badge badge-active">{inv.crop}</span>
               </td>
-              <td className="text-mono">₦{inv.amount.toLocaleString()}</td>
+              <td className="text-mono">{formatCurrency(inv.amount)}</td>
               <td style={{ textTransform: "capitalize" }}>
                 {inv.dividendType}
               </td>
@@ -1385,7 +1363,7 @@ function InvestmentsView({ investments, mode }) {
                 className="text-mono"
                 style={{ color: "var(--color-primary)" }}
               >
-                ₦{inv.expected_return.toLocaleString()}
+                {formatCurrency(inv.expected_return)}
               </td>
               <td>
                 <Link to={`/farms/${inv.farmId}`} className="btn-link">

@@ -29,7 +29,7 @@ export default function Navbar() {
     setMenuOpen(false);
     if (user?.role === 'investor') navigate('/investor/dashboard');
     else if (user?.role === 'farmer') navigate('/farmer/dashboard');
-    else if (user?.role === 'admin') navigate('/admin/dashboard');
+    else if (user?.role === 'admin') navigate('/agriflow-controls-5592/dashboard');
   };
 
   return (

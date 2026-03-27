@@ -6,6 +6,13 @@ from pydantic import computed_field
 from sqlmodel import SQLModel, Field, Column, Relationship
 import sqlalchemy.dialects.postgresql as pg
 import cloudinary
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.auth.models import User
+    from src.milestones.models import Milestone
+    from src.investments.models import Investment
+    from src.harvest.models import HarvestReport, Repayment
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -46,18 +53,18 @@ class Farm(SQLModel, table=True):
 
     @computed_field
     @property
-    def total_budget(self) -> float:
-        return self.total_budget_kobo / 100
+    def total_budget(self) -> Optional[float]:
+        return self.total_budget_kobo / 100 if self.total_budget_kobo is not None else None
 
     @computed_field
     @property
-    def amount_raised(self) -> float:
-        return self.amount_raised_kobo / 100
+    def amount_raised(self) -> Optional[float]:
+        return self.amount_raised_kobo / 100 if self.amount_raised_kobo is not None else None
 
     @computed_field
     @property
-    def sale_price_per_unit(self) -> float:
-        return self.sale_price_per_unit_kobo / 100
+    def sale_price_per_unit(self) -> Optional[float]:
+        return self.sale_price_per_unit_kobo / 100 if self.sale_price_per_unit_kobo is not None else None
 
     start_date: date
     harvest_date: date
@@ -68,6 +75,8 @@ class Farm(SQLModel, table=True):
     longitude: Optional[float] = Field(default = None)
 
     location_verified: bool = Field(default=False)
+
+    is_harvest_ready: bool = Field(default=False)
 
     location_photo_public_id: Optional[str] = Field(default=None, exclude=True)
     display_photos_public_id: Optional[list] = Field(
@@ -112,6 +121,21 @@ class Farm(SQLModel, table=True):
     milestones: List["Milestone"] = Relationship(
         back_populates="farm",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+
+    investments: List["Investment"] = Relationship(
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "primaryjoin": "Farm.id == Investment.farm_id"}
+    )
+    harvest_reports: List["HarvestReport"] = Relationship(
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "primaryjoin": "Farm.id == HarvestReport.farm_id"}
+    )
+
+    repayment: Optional["Repayment"] = Relationship(
+        sa_relationship_kwargs={
+            "uselist": False, 
+            "cascade": "all, delete-orphan",
+            "primaryjoin": "Farm.id == Repayment.farm_id"
+        }
     )
     
     @computed_field

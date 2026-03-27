@@ -11,9 +11,13 @@ from sqlalchemy.orm import selectinload
 from src.admin.schemas import AdminMilestoneOut
 from src.investments.models import Investment, InvestmentStatus
 from src.utils.logger import logger
+from src.interswitch.services import InterswitchPaymentServices
+from datetime import datetime
 
 
 class AdminServices:
+    def __init__(self):
+        self.interswitch_svc = InterswitchPaymentServices()
 
     async def get_pending_farms(self, session: AsyncSession) -> List[dict]:
         """Retrieves all farms awaiting approval, sorted by oldest first."""
@@ -589,11 +593,47 @@ class AdminFinancialServices:
         if not payouts:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no waiting payouts found for this farm")
 
-        # Mock payout success for Phase 2
+        # REAL Payout & SMART SCALING for Phase 2 Hackathon
+        INTERSWITCH_LIMIT_KOBO = 10_000_000
+        MINIMUM_PAYMENT_KOBO = 10_000
+
         for p in payouts:
-            p.status = PayoutStatus.COMPLETED
-            p.completed_at = datetime.utcnow()
-            session.add(p)
+            recipient = await session.get(User, p.recipient_id)
+            if not recipient:
+                logger.error(f"Recipient {p.recipient_id} not found for payout {p.id}")
+                continue
+
+            # Skip if bank details are missing
+            if not recipient.account_number or not recipient.bank_code:
+                logger.warning(f"Payout {p.id} skipped - recipient missing bank details")
+                continue
+
+            actual_payout_kobo = p.total_amount_kobo
+            transfer_kobo = actual_payout_kobo
+            
+            # Apply scaling only for large payouts
+            if actual_payout_kobo >= INTERSWITCH_LIMIT_KOBO:
+                transfer_kobo = actual_payout_kobo // 1000
+                if transfer_kobo < MINIMUM_PAYMENT_KOBO:
+                    transfer_kobo = MINIMUM_PAYMENT_KOBO
+                    
+            # Trigger the Interswitch transfer
+            try:
+                result = await self.interswitch_svc.single_transfer(
+                   account_number = recipient.account_number,
+                   bank_code      = recipient.bank_code,
+                   amount_kobo    = transfer_kobo
+                )
+                
+                if result["status"] == "success":
+                   p.status = PayoutStatus.COMPLETED
+                   p.completed_at = datetime.utcnow()
+                   p.interswitch_ref = result["transaction_reference"]
+                   session.add(p)
+                else:
+                   logger.error(f"Transfer failed for payout {p.id}: {result.get('message')}")
+            except Exception as e:
+                logger.error(f"Critical error during transfer for payout {p.id}: {str(e)}")
             
         farm = await session.get(Farm, farm_id)
         if not farm:

@@ -53,7 +53,10 @@ class Milestone(SQLModel, table=True):
 
     #relationships
     farm: "Farm" = Relationship(back_populates="milestones")
-    proofs: list["Proof"] = Relationship(back_populates="milestone")
+    proofs: list["Proof"] = Relationship(
+        back_populates="milestone",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
     @computed_field
     @property
