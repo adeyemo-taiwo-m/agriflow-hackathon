@@ -6,6 +6,7 @@ import FarmCard from '../components/FarmCard';
 import SkeletonCard from '../components/SkeletonCard';
 import EmptyState from '../components/EmptyState';
 import api from '../utils/api';
+import SEO from '../components/SEO';
 import { mockFarms, cropTypes, nigeriaStates } from '../data/mockData';
 
 let debounceTimer;
@@ -105,6 +106,11 @@ export default function FarmListingsPage() {
 
   return (
     <div className="listings-page">
+      <SEO
+        title="Explore Farm Investments"
+        description="Explore available harvest-backed farm investments on AgriFlow. Filter by crop, location, and funding status to find opportunities that match your goals."
+        type="website"
+      />
       <Navbar />
 
       {/* Farmer banner */}

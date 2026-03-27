@@ -5,6 +5,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import FarmCard from '../components/FarmCard';
+import SEO from '../components/SEO';
 import { mockFarms } from '../data/mockData';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -41,6 +42,11 @@ export default function LandingPage() {
 
   return (
     <div className="landing">
+      <SEO
+        title="Harvest-Backed Farm Investments"
+        description="AgriFlow connects verified farmers with investors through transparent, milestone-gated farm funding and harvest-backed returns."
+        type="website"
+      />
       <Navbar />
 
       {/* ── HERO ── */}

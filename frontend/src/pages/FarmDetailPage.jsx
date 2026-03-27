@@ -13,6 +13,7 @@ import { mockFarms, mockInvestorPortfolio } from '../data/mockData';
 import api from '../utils/api';
 import { formatCurrency } from '../utils/format';
 import Icon from '../components/Icon';
+import SEO from '../components/SEO';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -527,13 +528,28 @@ export default function FarmDetailPage() {
     return () => ctx.revert();
   }, [id, loading, farmData]);
 
+  const farm = farmData;
+  const seoTitle = farm?.name || 'Farm Details';
+  const seoDescription = farm
+    ? `${farm.name} is a ${farm.cropTag} investment opportunity in ${farm.location?.state || 'Nigeria'}. Track verified milestones and invest with harvest-backed returns on AgriFlow.`
+    : 'View verified farm investment details, milestone updates, and harvest-backed return potential on AgriFlow.';
+  const seoImage = farm?.photos?.[0];
+  const seoPath = `/farms/${id}`;
+
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
-      <div className="invest-spinner" style={{ width: '60px', height: '60px' }} />
-    </div>
+    <>
+      <SEO
+        title="Farm Details"
+        description="View verified farm investment details, milestone updates, and harvest-backed return potential on AgriFlow."
+        type="article"
+        url={seoPath}
+      />
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+        <div className="invest-spinner" style={{ width: '60px', height: '60px' }} />
+      </div>
+    </>
   );
 
-  const farm = farmData;
   if (!farm) return null;
 
   const isFarmer = user?.role === 'farmer';
@@ -909,6 +925,13 @@ export default function FarmDetailPage() {
 
   return (
     <div className="farm-detail-page">
+      <SEO
+        title={seoTitle}
+        description={seoDescription}
+        type="article"
+        image={seoImage}
+        url={seoPath}
+      />
       {!user && <Navbar />}
 
       {user ? (
