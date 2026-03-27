@@ -1,18 +1,26 @@
 from fastapi import UploadFile
 from typing import List, Optional
 from datetime import datetime, date
-from pydantic import Field, BaseModel, field_validator, computed_field
+from pydantic import Field, BaseModel, field_validator, computed_field, ConfigDict
 import uuid
 from src.milestones.schemas import ProofOut
 
 class FarmCreate(BaseModel):
-    
+    model_config = ConfigDict(extra="forbid")
+
     crop_reference_id: uuid.UUID
 
     name: str = Field(..., min_length=3, max_length=100)
     state: str
     lga: str
-    farm_size_ha: float = Field(..., gt=0) 
+    farm_size_ha: float = Field(..., gt=0)
+    description: str = Field(..., min_length=20)
+    total_budget: float = Field(..., gt=0)
+    expected_yield: float = Field(..., gt=0)
+    sale_price_per_unit: float = Field(..., gt=0)
+    return_rate: float = Field(..., gt=0, le=1)
+    start_date: date
+    harvest_date: date
 
 
 class HarvestReportMinOut(BaseModel):
