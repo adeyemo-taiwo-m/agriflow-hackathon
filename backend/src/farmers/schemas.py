@@ -10,11 +10,11 @@ class VerifyBVNInput(BaseModel):
     @field_validator('bvn')
     @classmethod
     def validate_bvn_or_magic(cls, value: str) -> str:
-        if value == '1000000000':
+        if value == '10000000000':
             return value
         if len(value) == 11 and value.isdigit():
             return value
-        raise ValueError('BVN must be 11 digits (or 1000000000 for test mode)')
+        raise ValueError('BVN must be 11 digits (or 10000000000 for test mode)')
 
 class AddBankAccountInput(BaseModel):
     bank_code: str

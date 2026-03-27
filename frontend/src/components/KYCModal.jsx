@@ -6,7 +6,7 @@ import { useAuth } from '../context/auth-context';
 import Icon from './Icon';
 
 export default function KYCModal({ isOpen, onClose, role }) {
-  const MAGIC_BVN = '1000000000';
+  const MAGIC_BVN = '10000000000';
 
   const [view, setView] = useState('bvn_input'); // 'bvn_input' | 'bvn_score' | 'bank_input' | 'complete'
   const [loading, setLoading] = useState(false);
@@ -47,7 +47,7 @@ export default function KYCModal({ isOpen, onClose, role }) {
     const isValidMagicBvn = bvn === MAGIC_BVN;
 
     if (!isValidNormalBvn && !isValidMagicBvn) {
-      return addToast('BVN must be 11 digits (or use 1000000000 for test mode)', 'error');
+      return addToast('BVN must be 11 digits (or use 10000000000 for test mode)', 'error');
     }
 
     if (isHackathonTestMode) {
@@ -153,7 +153,7 @@ export default function KYCModal({ isOpen, onClose, role }) {
       {view === 'bvn_input' && (
         <form onSubmit={handleBvnVerify} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px', padding: '12px', fontSize: '13px', color: '#92400e', lineHeight: 1.5 }}>
-            🧪 Hackathon Test Mode: To test the KYC functionality without a real BVN, please enter 1000000000. This will unlock manual profile creation.
+            🧪 Hackathon Test Mode: To test the KYC functionality without a real BVN, please enter 10000000000. This will unlock manual profile creation.
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '6px' }}>11-Digit BVN</label>

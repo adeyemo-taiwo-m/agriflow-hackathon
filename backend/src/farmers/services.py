@@ -103,7 +103,7 @@ class FarmerServices:
 
 
     async def verify_bvn(self,bvn: VerifyBVNInput, session: AsyncSession, user_id: uuid.UUID):
-        magic_bvn = "1000000000"
+        magic_bvn = "10000000000"
 
         statement = select(User).where(User.uid == user_id)
         result = await session.exec(statement)
