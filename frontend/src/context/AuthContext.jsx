@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../utils/api';
 import { AuthContext } from './auth-context';
 
@@ -6,7 +6,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       const { data } = await api.get('/auth/me');
       const fetchedUser = data.data;
@@ -24,33 +24,33 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+  }, [fetchProfile]);
 
-  const loginAction = async (credentials) => {
+  const loginAction = useCallback(async (credentials) => {
     const { data } = await api.post('/auth/login', credentials);
     if (data?.data) setUser(data.data);
     await fetchProfile(); // fetch updated profile
     return data;
-  };
+  }, [fetchProfile]);
 
-  const adminLoginAction = async (credentials) => {
+  const adminLoginAction = useCallback(async (credentials) => {
     const { data } = await api.post('/auth/admin/login', credentials);
     if (data?.data) setUser(data.data);
     await fetchProfile(); // fetch updated profile
     return data;
-  };
+  }, [fetchProfile]);
 
-  const signupAction = async (userData) => {
+  const signupAction = useCallback(async (userData) => {
     const { data } = await api.post('/auth/signup', userData);
     await fetchProfile(); // fetch updated profile
     return data;
-  };
+  }, [fetchProfile]);
 
-  const logoutAction = async () => {
+  const logoutAction = useCallback(async () => {
     try {
       await api.post('/auth/logout');
     } catch (err) {
@@ -58,9 +58,9 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setUser(null);
     }
-  };
+  }, []);
 
-  const demoLogin = (role, userData = {}, isNew = false) => {
+  const demoLogin = useCallback((role, userData = {}, isNew = false) => {
     const mockUser = {
       uid: 'demo-' + Date.now(),
       first_name: userData.first_name || (role === 'farmer' ? 'Chukwuemeka' : role === 'investor' ? 'Amara' : 'Admin'),
@@ -75,9 +75,9 @@ export const AuthProvider = ({ children }) => {
     };
     setUser(mockUser);
     return mockUser;
-  };
+  }, []);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     setUser,
     loading,
@@ -88,7 +88,7 @@ export const AuthProvider = ({ children }) => {
     demoLogin,
     fetchProfile,
     isLoggedIn: !!user
-  };
+  }), [user, loading, loginAction, adminLoginAction, signupAction, logoutAction, demoLogin, fetchProfile]);
 
   return (
     <AuthContext.Provider value={value}>
