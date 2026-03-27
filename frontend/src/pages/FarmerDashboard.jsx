@@ -1812,30 +1812,30 @@ export default function FarmerDashboard() {
                   <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>to receive your score and start listing farms</p>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '24px', alignItems: 'center' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '36px', fontWeight: 800, color: 'var(--color-primary)', lineHeight: 1 }}>{user?.trust_score || 0}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, marginTop: '4px' }}>/ 100</div>
-                  </div>
-                  
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span className="badge badge-active" style={{ background: 'var(--color-primary)', color: '#fff', fontSize: '11px', fontWeight: 700 }}>
-                        {user?.trust_tier === 'verified' ? 'Verified Farmer' : user?.trust_tier === 'emerging' ? 'Emerging Farmer' : 'Unrated'}
-                      </span>
-                      <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-                        {user?.trust_score >= 80 ? 'Excellent Standing' : 'Growing Trust'}
-                      </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '32px', alignItems: 'center' }}>
+                    <div style={{ textAlign: 'center', flex: '1 0 100px', borderRight: '1px solid var(--color-border)', paddingRight: '12px' }}>
+                      <div style={{ fontSize: '42px', fontWeight: 800, color: 'var(--color-primary)', lineHeight: 1 }}>{user?.trust_score || 0}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, marginTop: '4px' }}>/ 100</div>
                     </div>
-                    <div className="progress-track" style={{ height: '10px', background: 'var(--color-border)', borderRadius: '5px' }}>
-                      <div className="progress-fill" style={{ width: `${user?.trust_score || 0}%`, background: 'var(--color-primary)', borderRadius: '5px' }}></div>
+                    
+                    <div style={{ flex: '2 1 300px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span className="badge badge-active" style={{ background: 'var(--color-primary)', color: '#fff', fontSize: '11px', fontWeight: 700 }}>
+                          {user?.trust_tier === 'verified' ? 'Verified Farmer' : user?.trust_tier === 'emerging' ? 'Emerging Farmer' : 'Unrated'}
+                        </span>
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                          {user?.trust_score >= 80 ? 'Excellent Standing' : 'Growing Trust'}
+                        </span>
+                      </div>
+                      <div className="progress-track" style={{ height: '12px', background: 'var(--color-border)', borderRadius: '6px' }}>
+                        <div className="progress-fill" style={{ width: `${user?.trust_score || 0}%`, background: 'var(--color-primary)', borderRadius: '6px' }}></div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ flex: '1 1 260px', fontSize: '15px', color: 'var(--color-text-secondary)', lineHeight: 1.5, fontWeight: 500 }}>
+                      Complete more farms to earn additional points. All farmers are <span style={{color: 'var(--color-text-primary)', fontWeight: 600}}>BVN-verified</span>.
                     </div>
                   </div>
-                  
-                  <div style={{ maxWidth: '200px', fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.4, textAlign: 'right' }}>
-                    Complete more farms to earn additional points. All farmers are BVN-verified.
-                  </div>
-                </div>
               )}
             </div>
 

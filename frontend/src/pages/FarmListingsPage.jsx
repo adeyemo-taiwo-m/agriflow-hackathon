@@ -290,21 +290,19 @@ export default function FarmListingsPage() {
         }
         .pagination-num:hover { background: var(--color-card-alt); color: var(--color-text-primary); }
         .pagination-num.active { background: var(--color-primary); color: #fff; }
-        @media (max-width: 768px) {
-          .listings-body { flex-direction: column; padding-top: 24px; }
+        @media (max-width: 600px) {
+          .listings-body { flex-direction: column; padding-top: 24px; padding-left: 20px; padding-right: 20px; }
           .listings-sidebar { display: none; width: 100%; position: static; }
           .listings-sidebar.open { display: flex; }
-          .listings-filter-btn { display: flex; }
-          .listings-grid { gap: 16px; }
-          .listings-sort { width: 120px; }
+          .listings-filter-btn { display: flex; width: 100%; justify-content: center; }
+          .listings-grid { grid-template-columns: 1fr; gap: 24px; justify-items: center; }
+          .listings-sort { width: 100%; }
           .listings-search { max-width: 100%; }
+          .listings-toolbar { flex-direction: column; align-items: stretch; gap: 12px; }
         }
         @media (max-width: 480px) {
-          .listings-body { padding-left: 16px; padding-right: 16px; overflow-x: hidden; }
-          .listings-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
-          .listings-search-wrap, .listings-search { width: 100%; max-width: 100%; box-sizing: border-box; }
-          .listings-sort { width: 100%; box-sizing: border-box; }
-          .listings-grid { grid-template-columns: 1fr; }
+          .listings-body { padding-left: 16px; padding-right: 16px; }
+          .listings-grid { gap: 20px; }
         }
       `}</style>
     </div>

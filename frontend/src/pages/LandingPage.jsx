@@ -147,9 +147,9 @@ export default function LandingPage() {
           <h2 className="section-title">How it works</h2>
           <div className="steps-grid">
             {[
-              { num: '01', title: 'Farmers create projects', img: '/maize.jpg', desc: 'Farmers submit their farm plan, budget breakdown, and timeline. Our team verifies every application before it goes live.' },
-              { num: '02', title: 'Investors fund milestones', img: '/rice.jpg', desc: 'Browse verified farms and choose your investment amount. Watch your portfolio grow.' },
-              { num: '03', title: 'Returns at harvest', img: '/tomato.jpg', desc: 'Funds are released in stages only after milestone proofs are submitted and verified. At harvest, returns are calculated and disbursed.' },
+              { num: '01', title: 'Farmers create projects', img: '/farm-1.jpg', desc: 'Farmers submit their farm plan, budget breakdown, and timeline. Our team verifies every application before it goes live.' },
+              { num: '02', title: 'Investors fund milestones', img: '/farm-2.jpg', desc: 'Browse verified farms and choose your investment amount. Watch your portfolio grow.' },
+              { num: '03', title: 'Returns at harvest', img: '/farm-3.jpg', desc: 'Funds are released in stages only after milestone proofs are submitted and verified. At harvest, returns are calculated and disbursed.' },
             ].map((step) => (
               <div key={step.num} className="step-card card">
                 <div className="step-img-wrap" style={{ height: '140px', margin: '-32px -32px 24px', overflow: 'hidden' }}>
@@ -275,17 +275,44 @@ export default function LandingPage() {
         .preview-return-val { font-size: 18px; font-weight: 700; }
 
         /* Trust strip */
-        .trust-strip { background: var(--color-card-alt); padding: 28px 0; }
+        .trust-strip { 
+          background: #fff; 
+          padding: 64px 0; 
+          border-top: 1px solid var(--color-border);
+          border-bottom: 1px solid var(--color-border);
+        }
         .trust-inner {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 40px;
+          gap: 80px;
         }
-        .trust-stat { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-        .trust-value { font-size: 22px; font-weight: 700; color: var(--color-text-primary); }
-        .trust-label { font-size: 13px; color: var(--color-text-secondary); }
-        .trust-divider { width: 1px; height: 40px; background: var(--color-border); }
+        .trust-stat { 
+          display: flex; 
+          flex-direction: column; 
+          align-items: center; 
+          gap: 8px;
+          transition: transform var(--transition-base);
+          cursor: default;
+        }
+        .trust-stat:hover {
+          transform: translateY(-4px);
+        }
+        .trust-value { 
+          font-size: 36px; 
+          font-weight: 800; 
+          color: var(--color-primary); 
+          letter-spacing: -1px;
+          line-height: 1;
+        }
+        .trust-label { 
+          font-size: 14px; 
+          font-weight: 600;
+          color: var(--color-text-secondary); 
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .trust-divider { width: 1px; height: 60px; background: var(--color-border); }
 
         /* Sections */
         .section { padding: 80px 0; }
@@ -349,7 +376,7 @@ export default function LandingPage() {
         /* Responsive */
         @media (max-width: 1024px) {
           .hero-headline { font-size: 48px; }
-          .farms-preview-grid { grid-template-columns: repeat(2, 1fr); }
+          .farms-preview-grid { grid-template-columns: repeat(2, 1fr); gap: 20px; }
           .trust-section { grid-template-columns: 1fr; gap: 40px; }
         }
         @media (max-width: 768px) {
@@ -357,11 +384,15 @@ export default function LandingPage() {
           .hero-inner { grid-template-columns: 1fr; gap: 48px; }
           .hero-headline { font-size: 38px; }
           .hero-visual { display: none; }
-          .steps-grid { grid-template-columns: 1fr; }
-          .farms-preview-grid { grid-template-columns: 1fr; }
+          .steps-grid { grid-template-columns: 1fr; gap: 20px; }
+          .farms-preview-grid { grid-template-columns: 1fr; gap: 20px; justify-items: center; }
           .trust-inner { flex-direction: column; gap: 24px; }
           .trust-divider { width: 40px; height: 1px; }
           .section-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+        }
+        @media (max-width: 480px) {
+          .container { padding: 0 16px; }
+          .farms-preview-grid { gap: 16px; }
         }
       `}</style>
     </div>
